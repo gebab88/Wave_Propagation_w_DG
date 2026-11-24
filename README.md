@@ -112,7 +112,7 @@ mkdir -p run && cd run
 
 Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `bash tests/run-video-render.sh` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
 
-Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`.
+Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`, die Tests der Eingabe- und Stabilitätsprüfung mit `bash tests/run-input-checks.sh`.
 
 ---
 
@@ -144,9 +144,11 @@ Der **Zeitschritt** ist ordnungsabhängig (DG-CFL):
 deltaT = CFLReserve · dx / (|c₀| · (2·order − 1))
 ```
 
-Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die RK4-Grenze sinkt von ≈ 1,65 bei Ordnung 2 auf ≈ 0,76 bei Ordnung 8, siehe [Zeitintegration](docs/zeitintegration.md#4-stabilität)). Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Frames.
+Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die praktisch nutzbare RK4-Grenze sinkt von ≈ 1,43 bei Ordnung 2 auf ≈ 0,69 bei Ordnung 8, siehe [Zeitintegration](docs/zeitintegration.md#4-stabilität)). Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Frames.
 
 Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, `RungeKuttaSecond`, `RungeKuttaSecondOrder`, `PredictorCorrectorHeun`.
+
+Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch vor dem Menü: `CFLReserve`, `c_0` und `rho_0` müssen positiv sein, `x1` größer als `x0` und `t1` größer als `t0`. Diese Werte und `freq_i` dürfen außerdem nicht `.nan` oder `.inf` sein. Während der Rechnung prüft das Programm nach jedem Schritt den Druck. Ist er nicht mehr endlich oder betragsmäßig größer als 4, das Doppelte des exakten Maximums, bricht es mit einer Meldung und Status 1 ab, ohne Video. Das passiert, wenn `CFLReserve` für das gewählte Verfahren zu groß ist, beim Euler-Verfahren etwa schon mit dem Standardwert.
 
 ---
 

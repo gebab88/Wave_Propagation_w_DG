@@ -63,6 +63,39 @@ static T cfgGetOr(const YAML::Node &cfg, const char *key, const T &fallback) {
     }
 }
 
+// Value checks for the config. Written as !(condition) so that NaN fails them
+// too; yaml-cpp reads .nan and .inf as floating-point values.
+static void requireFinite(const char *key, double value) {
+    if (!std::isfinite(value)) {
+        cerr << "Config error: " << key << " must be a finite number (got " << value << ")" << endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void requirePositive(const char *key, double value) {
+    if (!(std::isfinite(value) && value > 0.0)) {
+        cerr << "Config error: " << key << " must be a finite number > 0 (got " << value << ")" << endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void requireIncreasing(const char *lowKey, double low, const char *highKey, double high) {
+    if (!(high > low)) {
+        cerr << "Config error: " << highKey << " must be greater than " << lowKey << " (got "
+             << lowKey << " = " << low << ", " << highKey << " = " << high << ")" << endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+// True when every pressure value (the even entries of X) is finite and at most
+// `limit` in magnitude. Written as !(|p| <= limit) so that NaN fails too.
+static bool pressureWithin(const vec &X, double limit) {
+    for (uword i = 0; i < X.n_elem; i += 2)
+        if (!(std::abs(X[i]) <= limit))
+            return false;
+    return true;
+}
+
 // Time integrators selectable at startup, in menu order, with the one-line
 // description shown next to each entry.
 struct TimeIntegratorInfo {
@@ -219,10 +252,11 @@ int main( int argc, char *argv[] ){
         cerr << "Config error: unknown TimeIntegration '" << configTimeIntegration << "'" << endl;
         return 1;
     }
-    const std::string TimeIntegration = selectTimeIntegration(configTimeIntegration);
-    StartTime = chrono::system_clock::now();   // exclude the time spent in the menu
 
+    // CFLReserve, x1 - x0 and c_0 set the time step. If it were zero or
+    // negative, the time loop below would never end.
     const float  CFLReserve = cfgGet<float>(cfg, "CFLReserve");
+    requirePositive("CFLReserve", CFLReserve);
 
     // Read N and order as signed so a negative value is rejected here instead of
     // wrapping to a huge unsigned (-> bad_alloc / out-of-bounds). N < 2 underflows
@@ -243,8 +277,14 @@ int main( int argc, char *argv[] ){
 
     const double t0 = cfgGet<double>(cfg, "t0");
     const double t1 = cfgGet<double>(cfg, "t1");
+    requireFinite("t0", t0);
+    requireFinite("t1", t1);
+    requireIncreasing("t0", t0, "t1", t1);
     const float  x0 = cfgGet<float>(cfg, "x0");
     const float  x1 = cfgGet<float>(cfg, "x1");
+    requireFinite("x0", x0);
+    requireFinite("x1", x1);
+    requireIncreasing("x0", x0, "x1", x1);
 
     vec x = linspace<vec>(x0, x1, Npoints);
     const double dx  = x[1] - x[0];
@@ -252,9 +292,12 @@ int main( int argc, char *argv[] ){
 
     const float  c_0   = cfgGet<float>(cfg, "c_0");
     const float  rho_0 = cfgGet<float>(cfg, "rho_0");
+    requirePositive("c_0", c_0);
+    requirePositive("rho_0", rho_0);
     const float  Z_0   = c_0 * rho_0;
 
     const double freq_i = cfgGet<double>(cfg, "freq_i");
+    requireFinite("freq_i", freq_i);
     const double omega  = 2 * M_PI * freq_i;
 
     const double mu     = cfgGet<double>(cfg, "mu");
@@ -300,6 +343,11 @@ int main( int argc, char *argv[] ){
         return 1;
     }
     omp_set_num_threads(static_cast<int>(OpenMPThreads));
+
+    // Ask only once the whole config is known to be valid, so a config error
+    // never follows an answered menu.
+    const std::string TimeIntegration = selectTimeIntegration(configTimeIntegration);
+    StartTime = chrono::system_clock::now();   // exclude the time spent in the menu
     // ------------------------------------------------------------------------------------
 
     float lambda_1 = c_0;
@@ -530,11 +578,34 @@ int main( int argc, char *argv[] ){
         ++nSnapshots;
     };
 
+    // The exact pressure never exceeds 2: the unit-amplitude inflow wave plus
+    // its reflection at the wall. Up to the integrator's practical limit the
+    // computed maximum stays below 2.1. Beyond it, disturbances at the inflow
+    // grow, usually without any value turning inf or NaN; for Heun, RK4 and
+    // the 3/8 rule they jump by orders of magnitude at once. Twice the exact
+    // maximum catches those jumps and leaves correct runs alone; Euler just
+    // beyond its limit can stay below it (docs/zeitintegration.md, section
+    // 4.4). This assumes the unit inflow and a zero initial state; other
+    // sources or initial states need a matching limit.
+    const double pressureLimit = 4.0;
+
     storeSnapshot();   // initial state at t0
     do {
         (dXdtObj.*step)(X, t);
         storeSnapshot();
         if (printEachStep) cout << "t=" << t << endl;
+        if (!pressureWithin(X, pressureLimit)) {
+            const vec p = X.elem(pressureDofs);
+            cerr << "Error: the solution is unstable at t = " << t << " s (step " << nSnapshots - 1 << "): ";
+            if (p.is_finite())
+                cerr << "max |p| = " << abs(p).max();
+            else
+                cerr << "the pressure is no longer finite";
+            cerr << ", while the exact pressure never exceeds 2." << endl
+                 << "The time step is too large for " << TimeIntegration << ". Reduce CFLReserve (currently "
+                 << CFLReserve << "); usable values are in docs/zeitintegration.md, section 4.4." << endl;
+            return 1;
+        }
     } while (t < t1);
 
     TimeSteps.resize(nSnapshots);

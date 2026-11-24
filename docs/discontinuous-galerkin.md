@@ -307,7 +307,7 @@ Für $n = 1$ und $n = 2$ gibt es eigene Zweige in `FluidMatrix` mit fest kodiert
 
 Der Faktor $1/(2p+1)$ ist die übliche Faustregel für Runge-Kutta-DG-Verfahren (Cockburn/Shu): Der Spektralradius des DG-Operators wächst mit dem Polynomgrad, der stabile Zeitschritt schrumpft entsprechend. `CFLReserve` soll dadurch eine Sicherheitsfraktion sein, die für alle Ordnungen ungefähr gleich viel Abstand zur Stabilitätsgrenze lässt.
 
-Gemessen gleicht der Faktor das Wachstum nicht vollständig aus: die Stabilitätsgrenze von RK4 in `CFLReserve` fällt von 1,65 ($n = 2$) über 1,02 ($n = 5$) auf 0,76 ($n = 8$). Mit 0,45 bleibt RK4 bei allen geprüften Ordnungen stabil. Die vollständige Tabelle für alle Integratoren steht in [`zeitintegration.md`](zeitintegration.md#4-stabilität).
+Gemessen gleicht der Faktor das Wachstum nicht vollständig aus: Die praktisch nutzbare Grenze von RK4 in `CFLReserve` fällt von 1,43 ($n = 2$) über 0,92 ($n = 5$) auf 0,69 ($n = 8$). Nach den Eigenwerten allein wären es 1,65, 1,02 und 0,76. Mit 0,45 bleibt RK4 bei allen geprüften Ordnungen darunter. Die vollständigen Tabellen für alle Integratoren und der Grund für den Unterschied stehen in [`zeitintegration.md`](zeitintegration.md#4-stabilität).
 
 Standardwerte: $\Delta t = 0{,}45 \cdot 0{,}01/(300\cdot 9) \approx 1{,}67\ \mu$s, rund 12 000 Schritte bis $t_1 = 20$ ms und 200 Schritte pro Schwingungsperiode.
 

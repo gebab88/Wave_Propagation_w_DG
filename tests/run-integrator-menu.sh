@@ -113,6 +113,16 @@ test_invalid_config_fails_early() {
     pass "${FUNCNAME[0]}"
 }
 
+test_config_error_before_menu() {
+    local bad="$work_dir/bad-n.yaml" out
+    sed 's/^N:.*/N: 1/' "$CFG" > "$bad"
+    # Enter answers the menu if one appears, so the error is printed either way.
+    out="$(run_tty $'\r' -- "$BIN" "$bad")"
+    expect_contains "${FUNCNAME[0]}" "$out" 'Config error: N must be >= 2' || return
+    [[ "$out" != *'Select time integration method'* ]] || { fail "${FUNCNAME[0]}" "menu shown before the config error"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
 test_prompt_flushed_when_stdout_piped() {
     local out; out="$(TTY_TIMEOUT=3 run_tty -- sh -c "'$BIN' '$CFG' | cat")"
     expect_contains "${FUNCNAME[0]}" "$out" 'Select time integration method:' &&
@@ -186,6 +196,7 @@ test_arrow_key_single_message || true
 test_ctrl_d_uses_config || true
 test_no_tty_skips_menu || true
 test_invalid_config_fails_early || true
+test_config_error_before_menu || true
 test_prompt_flushed_when_stdout_piped || true
 test_ctrl_c_restores_terminal || true
 test_ignored_sigint_stays_ignored || true
