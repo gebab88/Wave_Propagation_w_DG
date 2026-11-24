@@ -21,7 +21,7 @@ mit Kompressionsmodul `K = Z₀·c₀ = ρ₀·c₀²` und Impedanz `Z₀ = ρ�
 - **Diskretisierung:** nodale DG-Methode mit Gauß-Legendre-Knoten pro Zelle, Upwind-Fluss (charakteristische Aufspaltung `A = A⁺ + A⁻`).
 - **Linker Rand:** einlaufende Sinuswelle (reine rechtslaufende Charakteristik, `freq_i = 3 kHz`).
 - **Rechter Rand:** starre Wand (Reflexion, Druckverdopplung → Amplitude ±2 im eingeschwungenen Zustand).
-- **Zeitintegration:** standardmäßig Prädiktor-Korrektor nach Heun (implizite Trapezregel via Fixpunktiteration); weitere Verfahren sind verfügbar (siehe Konfiguration).
+- **Zeitintegration:** standardmäßig klassisches Runge-Kutta 4. Ordnung (RK4); weitere Verfahren sind verfügbar (siehe Konfiguration), darunter der deutlich langsamere Prädiktor-Korrektor nach Heun (implizite Trapezregel via Fixpunktiteration).
 
 ---
 
@@ -106,7 +106,7 @@ mkdir -p run && cd run
 ../bin/Release/DiscontinousGalerkin </dev/null   # findet config.yaml automatisch
 ```
 
-Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **36 s** (Simulation ~21 s, Plotten + Video ~15 s).
+Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **18 s** (Simulation ~5 s, Plotten + Video ~13 s).
 
 Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`.
 
@@ -125,7 +125,7 @@ Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wir
 | Parameter | Default | Bedeutung |
 |---|---|---|
 | `order` | `5` | Knotenordnung pro Zelle (funktional: 2, 5 und allgemein ≥ 3, z. B. 8) |
-| `TimeIntegration` | `PredictorCorrectorHeun` | Zeitintegrationsverfahren |
+| `TimeIntegration` | `RungeKuttaClassic` | Zeitintegrationsverfahren |
 | `N` | `50` | Anzahl Zellen |
 | `x0, x1` | `0.0, 0.5` | Gebiet [m] |
 | `t0, t1` | `0.0, 2e-2` | Zeitintervall [s] |

@@ -9,7 +9,7 @@
 # Time integrator. One of:
 #   EulerExplicit | RungeKuttaClassic | RungeKuttaSecond |
 #   RungeKuttaSecondOrder | PredictorCorrectorHeun
-TimeIntegration: PredictorCorrectorHeun
+TimeIntegration: RungeKuttaClassic
 
 # Order-independent safety fraction of the CFL limit (the order-dependent
 # 1/(2*order-1) factor is applied in code). 0.45 is stable across orders.
