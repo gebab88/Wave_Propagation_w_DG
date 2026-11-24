@@ -218,7 +218,10 @@ static int readKeyRaw() {
     return key;
 }
 
+// Drop pending input, e.g. type-ahead before the exit prompt. Without a console
+// on stdin the call fails and does nothing.
 static void discardPendingInput() {
+    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 }
 #endif
 
