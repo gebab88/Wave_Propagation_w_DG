@@ -77,3 +77,18 @@ jobs:
         run: make test-input-checks
       - name: Video tests
         run: make test-video
+      - name: Start the solver from PowerShell
+        # Outside MSYS2: the program must find ffmpeg and its DLLs through PATH alone.
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $env:PATH = "${{ steps.msys2.outputs.msys2-location }}\${{ matrix.prefix }}\bin;$env:PATH"
+          $out = $null | .\bin\Release\DiscontinousGalerkin.exe tests\linux-smoke-config.yaml 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          Write-Host "exit code: $code"
+          if ($code -ne 0) { Write-Host "Solver exited with code $code"; exit 1 }
+          if ($out -notmatch 'Video written to output\.mp4') { Write-Host "Missing 'Video written to output.mp4' line"; exit 1 }
+          $size = (Get-Item output.mp4 -ErrorAction SilentlyContinue).Length
+          Write-Host "output.mp4 size: $size bytes"
+          if (-not $size) { Write-Host "output.mp4 is missing or empty"; exit 1 }
