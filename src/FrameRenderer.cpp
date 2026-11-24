@@ -47,8 +47,18 @@ const Glyph kGlyphs[] = {
 const int kCharAdvance = (kGlyphW + 1) * kFontScale;
 const int kTextHeight = kGlyphH * kFontScale;
 
+bool hasGlyph(char ch) {
+    for (const Glyph &g : kGlyphs)
+        if (g.ch == ch) return true;
+    return false;
+}
+
+// Width of the drawable glyphs only; drawText skips characters without a glyph
+// and does not advance for them.
 int textWidth(const std::string &s) {
-    return s.empty() ? 0 : static_cast<int>(s.size()) * kCharAdvance - kFontScale;
+    int n = 0;
+    for (char ch : s) n += hasGlyph(ch) ? 1 : 0;
+    return n == 0 ? 0 : n * kCharAdvance - kFontScale;
 }
 
 std::string formatTick(double v) {
@@ -81,6 +91,7 @@ void blendInterior(std::uint8_t *img, int x, int y, Color c, double a) {
 }
 
 void drawText(std::uint8_t *img, const std::string &s, int left, int top) {
+    int pos = 0;  // index among drawable glyphs
     for (std::size_t i = 0; i < s.size(); ++i) {
         for (const Glyph &g : kGlyphs) {
             if (g.ch != s[i]) continue;
@@ -90,9 +101,10 @@ void drawText(std::uint8_t *img, const std::string &s, int left, int top) {
                     for (int dy = 0; dy < kFontScale; ++dy)
                         for (int dx = 0; dx < kFontScale; ++dx)
                             setPixel(img,
-                                     left + static_cast<int>(i) * kCharAdvance + col * kFontScale + dx,
+                                     left + pos * kCharAdvance + col * kFontScale + dx,
                                      top + row * kFontScale + dy, kBlack);
                 }
+            ++pos;
             break;
         }
     }
@@ -124,6 +136,10 @@ bool clipSegment(double &x0, double &y0, double &x1, double &y1,
     x0 = nx0; y0 = ny0; x1 = nx1; y1 = ny1;
     return true;
 }
+
+// Pixel-space coordinates are clamped to a safe range so deltas and Liang-Barsky
+// parameters stay finite; the plot box is < 1000 px, so in-range data is unchanged.
+double clampPx(double v) { return std::max(-1e6, std::min(1e6, v)); }
 
 double fpart(double v) { return v - std::floor(v); }
 
@@ -270,7 +286,9 @@ void FrameRenderer::render(const double *x, const double *y, std::size_t n,
         double bx = toPixelX(x[i + 1]), by = toPixelY(y[i + 1]);
         if (!std::isfinite(ax) || !std::isfinite(ay) || !std::isfinite(bx) || !std::isfinite(by))
             continue;
-        if (clipSegment(ax, ay, bx, by, xlo, ylo, xhi, yhi))
+        ax = clampPx(ax); ay = clampPx(ay); bx = clampPx(bx); by = clampPx(by);
+        if (clipSegment(ax, ay, bx, by, xlo, ylo, xhi, yhi) &&
+            std::isfinite(ax) && std::isfinite(ay) && std::isfinite(bx) && std::isfinite(by))
             wuLine(out, ax, ay, bx, by, kViolet);
     }
 

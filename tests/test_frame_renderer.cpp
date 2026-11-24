@@ -110,10 +110,77 @@ static void test_nonfinite_and_huge_values() {
     report("test_nonfinite_and_huge_values", before);
 }
 
+static bool outsideUnchanged(const FrameRenderer &r, const std::vector<std::uint8_t> &out) {
+    const auto &bg = r.background();
+    for (int py = 0; py < FrameRenderer::kHeight; ++py)
+        for (int px = 0; px < FrameRenderer::kWidth; ++px) {
+            const bool outside = px <= r.plotLeft() || px >= r.plotRight() ||
+                                 py <= r.plotTop() || py >= r.plotBottom();
+            if (outside && !(pixel(out, px, py) == pixel(bg, px, py))) return false;
+        }
+    return true;
+}
+
+static void test_extreme_finite_values() {
+    const int before = failures;
+    FrameRenderer r(0, 0.5, -2, 2);
+    std::vector<std::uint8_t> out(r.frameBytes());
+    const double x[] = {0, 0.1, 0.2, 0.3, 0.4, 0.5};
+    const double y[] = {1e306, -1e306, 1e306, -1e306, 1e306, -1e306};
+    r.render(x, y, 6, out.data());
+    CHECK(outsideUnchanged(r, out));
+    const double xe[] = {-1e306, 1e306, 0.25};
+    const double ye[] = {1e306, -1e306, 0.0};
+    r.render(xe, ye, 3, out.data());
+    CHECK(outsideUnchanged(r, out));
+    report("test_extreme_finite_values", before);
+}
+
+static bool violetish(const std::vector<std::uint8_t> &out, const std::vector<std::uint8_t> &bg,
+                      int x, int y) {
+    const Rgb p = pixel(out, x, y);
+    return p.r > p.g && p.b > p.g && !(p == pixel(bg, x, y));
+}
+
+static void test_marker_drawn() {
+    const int before = failures;
+    FrameRenderer r(0, 0.5, -2, 2);
+    std::vector<std::uint8_t> out(r.frameBytes());
+    const double x[] = {0.25}, y[] = {1.0};
+    r.render(x, y, 1, out.data());
+    const int cx = static_cast<int>(std::lround(r.toPixelX(0.25)));
+    const int cy = static_cast<int>(std::lround(r.toPixelY(1.0)));
+    const auto &bg = r.background();
+    CHECK(violetish(out, bg, cx - 3, cy));
+    CHECK(violetish(out, bg, cx + 3, cy));
+    CHECK(violetish(out, bg, cx, cy - 3));
+    CHECK(violetish(out, bg, cx, cy + 3));
+    report("test_marker_drawn", before);
+}
+
+static void test_segment_crossing_edge() {
+    const int before = failures;
+    FrameRenderer r(0, 0.5, -2, 2);
+    std::vector<std::uint8_t> out(r.frameBytes());
+    const double x[] = {0.1, 0.4}, y[] = {0.0, 5.0};
+    r.render(x, y, 2, out.data());
+    const int row = r.plotTop() + 2;
+    bool found = false;
+    const int x0 = static_cast<int>(r.toPixelX(0.1)), x1 = static_cast<int>(r.toPixelX(0.4));
+    for (int px = x0; px <= x1; ++px)
+        if (violetish(out, r.background(), px, row)) found = true;
+    CHECK(found);
+    CHECK(outsideUnchanged(r, out));
+    report("test_segment_crossing_edge", before);
+}
+
 int main() {
     test_nice_ticks();
     test_background_layout();
     test_render_curve();
     test_nonfinite_and_huge_values();
+    test_extreme_finite_values();
+    test_marker_drawn();
+    test_segment_crossing_edge();
     return failures == 0 ? 0 : 1;
 }
