@@ -198,7 +198,8 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
   `test_ctrl_z_uses_config` unter POSIX mit SKIP.
 - Die Windows-Jobs laufen wie die Linux-Jobs mit `fail-fast: false`.
 - Die drei POSIX-spezifischen Menü-Tests werden unter Windows übersprungen und
-  nicht nachgebaut. Strg+C beendet das Programm dort ohnehin nur über den
+  nicht nachgebaut. Zusammen mit `test_memory_bounded` aus den Video-Tests
+  (siehe oben) sind es vier SKIPs in `make test`. Strg+C beendet das Programm dort ohnehin nur über den
   Standard-Handler.
 - `make` kommt aus der MSYS-Umgebung (Paket `make`), nicht `mingw32-make`.
 
@@ -250,7 +251,9 @@ Das war bei der Umsetzung offen und ist in der CI geklärt (beide Windows-Jobs g
   - `make test` endet mit exit 0, und es gibt nur die oben genannten SKIPs.
   - Das Video hat die erwartete Frame-Zahl (ffprobe).
 - **Windows-Menü-Tests:** Die Menü-Tests laufen über den ConPTY-Helfer, nur
-  die drei POSIX-spezifischen sind übersprungen.
+  die drei POSIX-spezifischen sind übersprungen („3 skipped“ in der Menü-Suite).
+  Der vierte SKIP von `make test`, `test_memory_bounded`, gehört zu den
+  Video-Tests.
 - **Gegenproben**, je einmal in der CI (die dritte war unter Windows nicht rot,
   siehe „Offen“):
   - Mit `"w"` statt `"wb"` muss der Frame-Test unter Windows fehlschlagen.
