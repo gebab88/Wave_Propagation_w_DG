@@ -75,3 +75,5 @@ jobs:
         run: make Release Debug
       - name: Input checks
         run: make test-input-checks
+      - name: Video tests
+        run: make test-video
