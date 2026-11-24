@@ -1,6 +1,9 @@
 # Builds the solver and runs all tests on Linux, on x86_64 and on arm64 (the
 # Raspberry Pi architecture). The packages are those of Dockerfile.linux that
 # the build and the tests need; time(1) is for the memory test.
+# The Windows jobs build natively in MSYS2 (UCRT64/GCC on x64, CLANGARM64/clang
+# on arm64) with the Makefile; there is no local Windows machine, so CI is the
+# only place where the Windows port is verified.
 name: CI
 
 on:
@@ -39,3 +42,30 @@ jobs:
 
       - name: Run all tests
         run: make test
+
+  windows:
+    name: Windows ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025,   arch: x64,   msystem: UCRT64,     prefix: ucrt64,     compiler: "gcc:p" }
+          - { runner: windows-11-arm, arch: arm64, msystem: CLANGARM64, prefix: clangarm64, compiler: "clang:p openmp:p" }
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: make
+          pacboy: ${{ matrix.compiler }} armadillo:p openblas:p yaml-cpp:p ffmpeg:p
+      - name: Show environment
+        run: uname -s; uname -m; echo "MSYSTEM=$MSYSTEM"; (g++ --version || clang++ --version) | head -1
+      - name: Frame renderer test
+        run: make test-render
