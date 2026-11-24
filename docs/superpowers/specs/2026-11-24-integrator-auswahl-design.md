@@ -8,13 +8,21 @@ Verfahren wechseln, ohne `config.yaml` zu bearbeiten.
 
 ```
 Select time integration method:
-  1) EulerExplicit
-  2) RungeKuttaClassic
-  3) RungeKuttaSecond
-  4) RungeKuttaSecondOrder
-  5) PredictorCorrectorHeun   (config.yaml)
+  1) EulerExplicit           Euler, 1st order, needs small CFL
+  2) RungeKuttaClassic       classic RK4, 4th order
+  3) RungeKuttaSecond        Kutta 3/8 rule, 4th order
+  4) RungeKuttaSecondOrder   Heun, 2nd order, cheapest at default CFL
+  5) PredictorCorrectorHeun  RK4 + iterated trapezoid, slowest   (config.yaml)
 Press 1-5, Enter = config.yaml value:
 ```
+
+**Beschreibungsspalte** (Nachtrag 2026-11-24): Jede Zeile trägt eine Kurzbeschreibung,
+beginnend eine feste Spalte nach dem längsten Namen plus zwei Leerzeichen; Zeilen
+≤ 80 Zeichen. Grundlage sind Messungen mit der Default-Config (N=50, Ordnung 5):
+Euler divergiert bei `CFLReserve` 0,45 und 0,2 und ist erst ab etwa 0,1 stabil
+(dann mit Fehlern 1. Ordnung); `RungeKuttaSecond` ist Kuttas 3/8-Regel (4. Ordnung);
+`PredictorCorrectorHeun` braucht etwa 13× so lange wie RK4. Keine Zahlen im Menütext,
+weil die Stabilitätsgrenze von N, Ordnung und Laufzeit abhängt.
 
 ## Nicht-Ziele
 

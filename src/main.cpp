@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 #include <array>
+#include <algorithm>
+#include <cstring>
 #include <cmath>
 #include <armadillo>
 #include <stdlib.h>
@@ -61,14 +63,23 @@ static T cfgGetOr(const YAML::Node &cfg, const char *key, const T &fallback) {
     }
 }
 
-// Time integrators selectable at startup, in menu order.
-static const std::array<const char*, 5> kTimeIntegrators = {
-    "EulerExplicit", "RungeKuttaClassic", "RungeKuttaSecond",
-    "RungeKuttaSecondOrder", "PredictorCorrectorHeun"};
+// Time integrators selectable at startup, in menu order, with the one-line
+// description shown next to each entry.
+struct TimeIntegratorInfo {
+    const char *name;
+    const char *description;
+};
+static const std::array<TimeIntegratorInfo, 5> kTimeIntegrators = {{
+    {"EulerExplicit",          "Euler, 1st order, needs small CFL"},
+    {"RungeKuttaClassic",      "classic RK4, 4th order"},
+    {"RungeKuttaSecond",       "Kutta 3/8 rule, 4th order"},
+    {"RungeKuttaSecondOrder",  "Heun, 2nd order, cheapest at default CFL"},
+    {"PredictorCorrectorHeun", "RK4 + iterated trapezoid, slowest"},
+}};
 
 static bool isKnownTimeIntegrator(const std::string &name) {
-    for (const char *known : kTimeIntegrators)
-        if (name == known)
+    for (const TimeIntegratorInfo &known : kTimeIntegrators)
+        if (name == known.name)
             return true;
     return false;
 }
@@ -134,10 +145,17 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
 
     // Menu goes to stderr so it stays visible when stdout is redirected to a file.
     const std::string keyRange = "1-" + std::to_string(kTimeIntegrators.size());
+    // Descriptions start in one column: longest name plus two spaces.
+    size_t nameWidth = 0;
+    for (const TimeIntegratorInfo &info : kTimeIntegrators)
+        nameWidth = std::max(nameWidth, std::strlen(info.name));
     cerr << "Select time integration method:" << endl;
     for (size_t i = 0; i < kTimeIntegrators.size(); ++i) {
-        cerr << "  " << (i + 1) << ") " << kTimeIntegrators[i];
-        if (configDefault == kTimeIntegrators[i])
+        const TimeIntegratorInfo &info = kTimeIntegrators[i];
+        cerr << "  " << (i + 1) << ") " << info.name
+             << std::string(nameWidth - std::strlen(info.name) + 2, ' ')
+             << info.description;
+        if (configDefault == info.name)
             cerr << "   (config.yaml)";
         cerr << endl;
     }
@@ -147,7 +165,7 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
         cerr << "Press " << keyRange << ", Enter = config.yaml value: " << flush;
         const int key = readKeyRaw();
         if (key >= '1' && key < '1' + static_cast<int>(kTimeIntegrators.size())) {
-            chosen = kTimeIntegrators[key - '1'];
+            chosen = kTimeIntegrators[key - '1'].name;
             break;
         }
         if (key == '\n' || key == '\r' || key == 0x04 || key == -1) {

@@ -48,9 +48,26 @@ expect_contains() {  # name output needle
 test_key_selects_method() {
     local out; out="$(run_tty 2 -- "$BIN" "$CFG")"
     expect_contains "${FUNCNAME[0]}" "$out" 'Select time integration method:' &&
-    expect_contains "${FUNCNAME[0]}" "$out" '  5) PredictorCorrectorHeun   (config.yaml)' &&
+    expect_contains "${FUNCNAME[0]}" "$out" 'PredictorCorrectorHeun  RK4 + iterated trapezoid, slowest   (config.yaml)' &&
     expect_contains "${FUNCNAME[0]}" "$out" 'Using: RungeKuttaClassic' &&
     expect_contains "${FUNCNAME[0]}" "$out" 'The calculations are finished!' &&
+    pass "${FUNCNAME[0]}"
+}
+
+test_menu_shows_descriptions() {
+    local out line; out="$(run_tty 2 -- "$BIN" "$CFG")"
+    local expected=(
+        '  1) EulerExplicit           Euler, 1st order, needs small CFL'
+        '  2) RungeKuttaClassic       classic RK4, 4th order'
+        '  3) RungeKuttaSecond        Kutta 3/8 rule, 4th order'
+        '  4) RungeKuttaSecondOrder   Heun, 2nd order, cheapest at default CFL'
+        '  5) PredictorCorrectorHeun  RK4 + iterated trapezoid, slowest   (config.yaml)'
+    )
+    for line in "${expected[@]}"; do
+        if ! printf '%s\n' "$out" | grep -Fxq -- "$line"; then
+            fail "${FUNCNAME[0]}" "missing exact line '$line'"; return 1
+        fi
+    done
     pass "${FUNCNAME[0]}"
 }
 
@@ -162,6 +179,7 @@ test_menu_visible_when_stdout_redirected() {
 }
 
 test_key_selects_method || true
+test_menu_shows_descriptions || true
 test_enter_uses_config || true
 test_invalid_key_reprompts || true
 test_arrow_key_single_message || true
