@@ -9,17 +9,22 @@ using namespace arma;
 class ClassPlot
 {
     public:
-        ClassPlot(mat pressure, vec TimeSteps, const vec &xnodes);
+        // Keeps references to the arguments: they must outlive this object.
+        ClassPlot(const mat &pressure, const vec &TimeSteps, const vec &xnodes,
+                  double x0, double x1);
         ~ClassPlot();
-        void Plot();
-        void MakeVideo(const std::string &filename = "output.mp4");
+        // Renders one frame per stored time step and streams them as raw rgb24
+        // into ffmpeg. Returns true on success.
+        bool RenderVideo(const std::string &filename = "output.mp4");
 
     protected:
 
     private:
-        mat pressure;
-        vec TimeSteps;
-        vec xnodes;
+        const mat &pressure;
+        const vec &TimeSteps;
+        const vec &xnodes;
+        double x0;
+        double x1;
 };
 
 #endif // CLASSPLOT_H

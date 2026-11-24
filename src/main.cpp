@@ -561,12 +561,9 @@ int main( int argc, char *argv[] ){
 
     cout << "Plotting starts!" << endl;
 
-    ClassPlot PlotObj(pressureSolution, TimeSteps, xnodes);
+    ClassPlot PlotObj(pressureSolution, TimeSteps, xnodes, x0, x1);
 
-    PlotObj.Plot();
-
-    cout << "Encoding video!" << endl;
-    PlotObj.MakeVideo("output.mp4");
+    PlotObj.RenderVideo("output.mp4");
 
     EndTimePlot = chrono::system_clock::now();
     elapsed_time =  chrono::duration_cast<chrono::microseconds>

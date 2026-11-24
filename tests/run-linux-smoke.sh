@@ -33,14 +33,14 @@ trap 'rm -rf "$run_dir"' EXIT
 cd "$run_dir"
 "$repo_root/bin/Release/DiscontinousGalerkin" "$repo_root/tests/linux-smoke-config.yaml" </dev/null
 
-frame_count="$(find . -maxdepth 1 -name '*.png' -print | wc -l | tr -d ' ')"
-if [[ "$frame_count" -lt 2 ]]; then
-    echo "Expected at least 2 PNG frames, got $frame_count" >&2
+if [[ ! -s output.mp4 ]]; then
+    echo "Expected non-empty output.mp4" >&2
     exit 1
 fi
 
-if [[ ! -s output.mp4 ]]; then
-    echo "Expected non-empty output.mp4" >&2
+frame_count="$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 output.mp4)"
+if [[ -z "$frame_count" || "$frame_count" -lt 2 ]]; then
+    echo "Expected at least 2 video frames, got '$frame_count'" >&2
     exit 1
 fi
 

@@ -33,8 +33,8 @@ ifeq ($(UNAME_S),Darwin)
   CFLAGS  = $(BASE_CFLAGS) -m64 $(INCLUDES) $(OMPFLAGS)
 
   # HDF5 isn't used (all hdf5 calls in the code are commented out), so we don't
-  # link it. Boost / gnuplot-iostream were dropped too: the solver talks to gnuplot
-  # directly (script files + the gnuplot process, see ClassPlot), so neither is needed.
+  # link it. Boost / gnuplot-iostream were dropped too: frames are rendered in
+  # process (FrameRenderer) and streamed into ffmpeg (see ClassPlot), so neither is needed.
   # yaml-cpp (MacPorts) is linked for runtime config parsing (config.yaml).
   LDFLAGS = -framework Accelerate -pthread $(OMPLIBS) -L$(MACPORTS)/lib -lyaml-cpp
 else ifeq ($(UNAME_S),Linux)
@@ -51,8 +51,6 @@ endif
 
 #LDFLAGS = -larmadillo  -DARMA_DONT_USE_WRAPPER -llapack -lopen-blas
 
-VIDEO = output
-PLAYER = vlc
 UNAME:=$(shell uname -a)
 
 # Explicit object list so the per-file rules below are actually triggered.
@@ -96,12 +94,6 @@ test-render: obj/Release/FrameRenderer.o tests/test_frame_renderer.cpp $(HEADERS
 	$(CXX) $(CFLAGS) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
 	bin/Release/test_frame_renderer
 
-video:
-	#@echo 'Programm is runnung on System' $(UNAME)
-	ffmpeg  -framerate 60 -i %08d.png -c:v libx264 -pix_fmt yuv420p -r 30 $(VIDEO).mp4
-	#ffmpeg -framerate 30 -i *.png -c:v libx264 -r 30 $(VIDEO).mp4
-	open -a $(PLAYER) $(VIDEO).mp4
-
 cleanOBJ:
 	rm -rf $(OBJS)
 
@@ -121,4 +113,4 @@ cleanPictures:
 docker-test-linux-arm64:
 	scripts/docker-linux-arm64-test.sh
 
-.PHONY: cleanOBJ cleanBIN cleanAll video cleanPictures Release Debug test-render docker-test-linux-arm64
+.PHONY: cleanOBJ cleanBIN cleanAll cleanPictures Release Debug test-render docker-test-linux-arm64
