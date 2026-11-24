@@ -98,11 +98,11 @@ cleanOBJ:
 	rm -rf $(OBJS)
 
 cleanBIN:
-	rm -rf bin/Release/DiscontinousGalerkin
+	rm -rf bin/Release/DiscontinousGalerkin bin/Release/test_frame_renderer
 
 clean:
 	rm -rf $(OBJS)
-	rm -rf $(BIN)
+	rm -rf $(BIN) bin/Release/test_frame_renderer
 	rm -rf *.png
 	rm -rf *.mp4
 	rm -rf *.dat

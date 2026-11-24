@@ -23,6 +23,7 @@ WORKDIR /src
 COPY . .
 
 RUN make Release
+RUN make test-render
 RUN tests/run-linux-smoke.sh --skip-build
 
 CMD ["tests/run-linux-smoke.sh"]

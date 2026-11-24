@@ -11,8 +11,8 @@
 #   RungeKuttaSecondOrder | PredictorCorrectorHeun
 TimeIntegration: RungeKuttaClassic
 
-# Disable for compute-only benchmark runs. When true, PNG frames and output.mp4
-# are generated after the simulation.
+# Disable for compute-only benchmark runs. When true, output.mp4 is rendered
+# after the simulation.
 EnablePlotting: true
 
 # On Raspberry Pi, use OpenMP for solver cell loops from N >= 50 with two

@@ -28,7 +28,7 @@ test_frame_count_matches() {
     if [[ -z "$n" ]]; then fail "$name" "no 'Rendering <n> frames at 60 fps' line"; cd "$work_dir"; return; fi
     if [[ ! -s output.mp4 ]]; then fail "$name" "output.mp4 missing or empty"; cd "$work_dir"; return; fi
     local probe; probe="$(ffprobe -v error -count_frames -select_streams v:0 \
-        -show_entries stream=nb_read_frames,r_frame_rate,width,height -of csv=p=0 output.mp4)"
+        -show_entries stream=nb_read_frames,r_frame_rate,width,height -of csv=p=0 output.mp4)" || probe="ffprobe failed"
     local pngs; pngs="$(find . -maxdepth 1 -name '*.png' | wc -l | tr -d ' ')"
     cd "$work_dir"
     if [[ "$probe" != "800,600,60/1,$n" ]]; then fail "$name" "ffprobe said '$probe', expected '800,600,60/1,$n'"; return; fi
@@ -57,8 +57,13 @@ test_memory_bounded() {
     fi
     mkdir -p "$d"; cd "$d"
     local log="$d/time.log"
-    /usr/bin/time -l "$BIN" "$DEFAULT_CFG" </dev/null >/dev/null 2>"$log" || true
+    local cfg="$d/config.yaml"
+    sed 's/^\( *EnablePlotting:\).*/\1 true/' "$DEFAULT_CFG" >"$cfg"
+    local rc=0
+    /usr/bin/time -l "$BIN" "$cfg" </dev/null >"$d/out.log" 2>"$log" || rc=$?
     cd "$work_dir"
+    if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
+    if ! grep -q 'Video written to' "$d/out.log"; then fail "$name" "no 'Video written to' in output"; return; fi
     local rss; rss="$(sed -n 's/^ *\([0-9][0-9]*\)  *maximum resident set size.*/\1/p' "$log" | head -n1)"
     if [[ -z "$rss" ]]; then fail "$name" "no max RSS in time output"; return; fi
     if (( rss < 1073741824 )); then pass "$name (max RSS $rss bytes)"

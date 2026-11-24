@@ -1,4 +1,4 @@
-# Like menu-test-config.yaml but with plotting enabled (PNG frames + video),
+# Like menu-test-config.yaml but with plotting enabled (video only),
 # for the "Press enter to exit." test. Run it in a scratch directory.
 TimeIntegration: PredictorCorrectorHeun
 EnablePlotting: true

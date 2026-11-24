@@ -34,7 +34,8 @@ mit Kompressionsmodul `K = Z₀·c₀ = ρ₀·c₀²` und Impedanz `Z₀ = ρ�
 | `src/ClassdXdt.{cpp,hpp}` | Räumlicher DG-Operator (rechte Seite der ODE, numerischer Fluss) + Zeitintegratoren |
 | `src/InitialAndBoundary.{cpp,hpp}` | Anfangs- und Randbedingungen |
 | `src/vandermonde.{cpp,hpp}` | Vandermonde- & Differentiationsmatrix (für die Steifigkeitsmatrix) |
-| `src/ClassPlot.{cpp,hpp}` | Paralleles Zeichnen der Frames, Streaming nach ffmpeg |
+| `src/FrameRenderer.{cpp,hpp}` | Zeichnet die Video-Frames: Achsen, Gitter, Kurve |
+| `src/ClassPlot.{cpp,hpp}` | Paralleles Zeichnen der Frames, Streaming der rohen Frames nach ffmpeg |
 | `Makefile` | Build (für macOS / MacPorts konfiguriert) |
 
 ---
@@ -66,6 +67,7 @@ sudo port install ffmpeg                                                   # fü
 
 ```sh
 make Release          # -> bin/Release/DiscontinousGalerkin
+make test-render      # Unit-Tests für den Frame-Renderer
 make clean            # Objektdateien, Binary, *.png, *.mp4, *.dat entfernen
 ```
 
@@ -104,7 +106,7 @@ mkdir -p run && cd run
 ../bin/Release/DiscontinousGalerkin </dev/null   # findet config.yaml automatisch
 ```
 
-Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `bash tests/run-video-render.sh`.
+Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `bash tests/run-video-render.sh` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
 
 Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`.
 
