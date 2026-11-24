@@ -2,6 +2,9 @@
 # Replaces the former compile-time include/config.hpp: edit and re-run, no rebuild.
 # Path is taken from argv[1], else "config.yaml" in the working directory.
 #
+# This file is the versioned template. Your own settings go into config.yaml
+# (not tracked by git); `make Release` creates it from this file if it is missing.
+#
 # Only independent parameters live here. Derived quantities are computed in code:
 #   Npoints = N + 1,  Z_0 = c_0 * rho_0,  omega = 2*pi*freq_i,
 #   x = linspace(x0, x1, Npoints),  dx = x[1]-x[0],  Jac = dx/2.
@@ -10,6 +13,17 @@
 #   EulerExplicit | RungeKuttaClassic | RungeKuttaSecond |
 #   RungeKuttaSecondOrder | PredictorCorrectorHeun
 TimeIntegration: RungeKuttaClassic
+
+# Disable for compute-only benchmark runs. When true, output.mp4 is rendered
+# after the simulation.
+EnablePlotting: true
+
+# On Raspberry Pi, use OpenMP for solver cell loops from N >= 50 with two
+# threads, and from N >= 512 with four threads.
+OpenMPMinCells: 50
+OpenMPThreads: 2
+OpenMPLargeMinCells: 512
+OpenMPLargeThreads: 4
 
 # Order-independent safety fraction of the CFL limit (the order-dependent
 # 1/(2*order-1) factor is applied in code). 0.45 is stable across orders.

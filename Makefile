@@ -65,11 +65,17 @@ HEADERS= $(wildcard include/*.h include/*.hpp)
 # Output directories are gitignored, so make sure they exist on a fresh clone.
 $(shell mkdir -p obj/Release bin/Release bin/Debug)
 
-Release:  $(OBJS)
+Release:  $(OBJS) | config.yaml
 	$(CXX)  -o $(BIN) $(OBJS) $(LDFLAGS)
 
-Debug: $(OBJS)
+Debug: $(OBJS) | config.yaml
 	$(CXX) -o bin/Debug/DiscontinousGalerkin $(OBJS) $(LDFLAGS)
+
+# config.yaml is local and untracked; create it from the versioned template on a
+# fresh clone. An existing config.yaml is never overwritten.
+config.yaml:
+	cp config_example.yaml config.yaml
+	@echo "Created config.yaml from config_example.yaml"
 
 obj/Release/main.o: src/main.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) -c $< -o obj/Release/main.o

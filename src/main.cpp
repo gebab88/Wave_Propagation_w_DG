@@ -209,7 +209,7 @@ int main( int argc, char *argv[] ){
         if (!recovered) {
             cerr << "Error: could not read config '" << configPath << "': " << e.what() << "\n"
                  << "Pass the path as the first argument, or place config.yaml in the CWD "
-                    "(or next to the binary)." << endl;
+                    "(or next to the binary), e.g. `cp config_example.yaml config.yaml`." << endl;
             return 1;
         }
     }

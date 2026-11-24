@@ -30,7 +30,8 @@ mit Kompressionsmodul `K = Z₀·c₀ = ρ₀·c₀²` und Impedanz `Z₀ = ρ�
 | Datei | Zweck |
 |---|---|
 | `src/main.cpp` | Aufbau (Anfangswerte, Massen-/Steifigkeitsmatrix), Zeitschleife, Orchestrierung |
-| `config.yaml` | Alle Simulationsparameter (zur **Laufzeit** via yaml-cpp gelesen) |
+| `config_example.yaml` | Versionierte Vorlage mit allen Simulationsparametern und Defaults |
+| `config.yaml` | Eigene, lokale Einstellungen (nicht im Git; zur **Laufzeit** via yaml-cpp gelesen) |
 | `src/ClassdXdt.{cpp,hpp}` | Räumlicher DG-Operator (rechte Seite der ODE, numerischer Fluss) + Zeitintegratoren |
 | `src/InitialAndBoundary.{cpp,hpp}` | Anfangs- und Randbedingungen |
 | `src/vandermonde.{cpp,hpp}` | Vandermonde- & Differentiationsmatrix (für die Steifigkeitsmatrix) |
@@ -66,7 +67,7 @@ sudo port install ffmpeg                                                   # fü
 ## Bauen
 
 ```sh
-make Release          # -> bin/Release/DiscontinousGalerkin
+make Release          # -> bin/Release/DiscontinousGalerkin (legt config.yaml aus config_example.yaml an, falls sie fehlt)
 make test-render      # Unit-Tests für den Frame-Renderer
 make clean            # Objektdateien, Binary, *.png, *.mp4, *.dat entfernen
 ```
@@ -114,7 +115,7 @@ Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsve
 
 ## Konfiguration (`config.yaml`)
 
-Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wirken **ohne Neukompilieren**. Nur unabhängige Größen stehen in der Datei; abgeleitete (`Npoints`, `Z_0`, `omega`, `x`, `dx`, `Jac`) werden im Code berechnet.
+Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wirken **ohne Neukompilieren**. `config.yaml` ist lokal und nicht versioniert; die Vorlage ist `config_example.yaml` (`make Release` kopiert sie beim ersten Bauen, sonst `cp config_example.yaml config.yaml`). Neue Parameter oder geänderte Defaults gehören in `config_example.yaml`. Nur unabhängige Größen stehen in der Datei; abgeleitete (`Npoints`, `Z_0`, `omega`, `x`, `dx`, `Jac`) werden im Code berechnet.
 
 | Parameter | Default | Bedeutung |
 |---|---|---|

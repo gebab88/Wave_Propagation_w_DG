@@ -9,7 +9,7 @@ make Release >/dev/null
 
 BIN="$repo_root/bin/Release/DiscontinousGalerkin"
 SMOKE_CFG="$repo_root/tests/linux-smoke-config.yaml"
-DEFAULT_CFG="$repo_root/config.yaml"
+DEFAULT_CFG="$repo_root/config_example.yaml"   # versioned defaults, not the local config.yaml
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
