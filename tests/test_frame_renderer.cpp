@@ -53,9 +53,13 @@ static void test_nice_ticks() {
 
 static void test_nice_ticks_large_offset() {
     int before = failures;
-    alarm(5);  // a regression hangs; fail instead
+#ifndef _WIN32
+    alarm(5);  // a regression hangs; fail instead (Windows has no alarm(): CI timeout)
+#endif
     auto t = niceTicks(1e17, 1e17 + 64, 11);
+#ifndef _WIN32
     alarm(0);
+#endif
     CHECK(t.size() <= 11);
     report("test_nice_ticks_large_offset", before);
 }
