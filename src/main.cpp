@@ -203,8 +203,19 @@ static bool menuCanReadKeys() {
     return GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
 }
 
+// What readKeyRaw() returns for a key that _getch() reports as two codes, 0 or
+// 0xE0 followed by a scan code (arrows, function keys, Home, ...). The scan code
+// is read as well, so it is never taken for a key of its own.
+static const int kExtendedKey = 256;
+
+// Read one key without waiting for Enter or echoing it.
 static int readKeyRaw() {
-    return _getch();
+    const int key = _getch();
+    if (key == 0 || key == 0xE0) {
+        _getch();
+        return kExtendedKey;
+    }
+    return key;
 }
 
 static void discardPendingInput() {
