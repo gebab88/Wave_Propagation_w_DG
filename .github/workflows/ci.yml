@@ -71,3 +71,7 @@ jobs:
         run: make test-render
       - name: Video pipe test
         run: make test-pipe
+      - name: Release and Debug build
+        run: make Release Debug
+      - name: Input checks
+        run: make test-input-checks
