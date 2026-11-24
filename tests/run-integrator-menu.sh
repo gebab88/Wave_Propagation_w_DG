@@ -26,7 +26,8 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 
 # run_tty <key1> [<key2> ...] -- <cmd...>
 # Runs cmd in a pseudo-terminal; each key is sent separately, 0.5 s after the
-# previous event (raw mode must be active first), then 1 s of grace.
+# previous event (raw mode must be active first), then 1 s of grace. A key
+# @wait:<text> sends nothing; it waits until <text> is in the output.
 # Env: TTY_KEY_DELAY (default 0.5) pause before each key, TTY_TAIL (default 1)
 # seconds the input stays open after the last key, TTY_TIMEOUT (default 20).
 # TTY_CLOSE_AFTER: after the last key, wait until this text is in the output;
@@ -38,6 +39,10 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 # unfiltered console output there; run_tty adds the test name before it.
 TTY_LOG="$work_dir/tty-output.log"
 TTY_CLOSED_MARKER="$work_dir/tty-input-closed"
+wait_for_output() {  # text, at most $limit seconds
+    local deadline=$((SECONDS + limit))
+    until grep -qF -- "$1" "$TTY_LOG" || (( SECONDS >= deadline )); do sleep 0.1; done
+}
 run_tty() {
     local keys=()
     while [[ $# -gt 0 && "$1" != "--" ]]; do keys+=("$1"); shift; done
@@ -59,11 +64,11 @@ run_tty() {
     : >"$TTY_LOG"
     rm -f "$TTY_CLOSED_MARKER"
     (
-        for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done
-        if [[ -n "${TTY_CLOSE_AFTER:-}" ]]; then
-            deadline=$((SECONDS + limit))
-            until grep -qF -- "$TTY_CLOSE_AFTER" "$TTY_LOG" || (( SECONDS >= deadline )); do sleep 0.1; done
-        fi
+        for k in ${keys[@]+"${keys[@]}"}; do
+            if [[ "$k" == @wait:* ]]; then wait_for_output "${k#@wait:}"; continue; fi
+            sleep "$delay"; printf '%s' "$k"
+        done
+        if [[ -n "${TTY_CLOSE_AFTER:-}" ]]; then wait_for_output "$TTY_CLOSE_AFTER"; fi
         sleep "$tail_s"
         : >"$TTY_CLOSED_MARKER"
     ) | timeout "$limit" "${script_cmd[@]}" 2>&1 | tee "$TTY_LOG" | tr -d '\r' || true
@@ -224,7 +229,9 @@ test_menu_time_not_in_elapsed() {
 test_enter_after_key_does_not_skip_exit_prompt() {
     local plot_cfg="$repo_root/tests/menu-plot-test-config.yaml" out d
     d="$(mktemp -d)"
-    # '2' at 0.3 s and a habitual Enter at 0.6 s, while the solver still runs.
+    # '2' at 0.3 s and a habitual Enter 0.3 s after 'Using:', while the solver
+    # still runs. Waiting for 'Using:' matters where startup is slow (Windows:
+    # with fixed times the Enter can reach the console before the solver runs).
     # The input stays open until 2 s after the exit prompt has appeared; closing
     # it makes script send ^D (conpty_run: Ctrl+Z, Enter), which ends the final
     # cin.get(). Had the queued Enter answered the prompt, the program would have
@@ -232,7 +239,7 @@ test_enter_after_key_does_not_skip_exit_prompt() {
     # instead of a fixed time matters when plotting is slow (about 23 s for x64
     # under QEMU).
     out="$(cd "$d" && TTY_KEY_DELAY=0.3 TTY_CLOSE_AFTER='Press enter to exit.' TTY_TAIL=2 TTY_TIMEOUT=120 \
-        run_tty 2 $'\r' -- bash -c "'$BIN' '$plot_cfg'; if [ -e '$TTY_CLOSED_MARKER' ]; then echo exit=after_input_closed; else echo exit=before_input_closed; fi")"
+        run_tty 2 @wait:Using: $'\r' -- bash -c "'$BIN' '$plot_cfg'; if [ -e '$TTY_CLOSED_MARKER' ]; then echo exit=after_input_closed; else echo exit=before_input_closed; fi")"
     rm -rf "$d"
     expect_contains "${FUNCNAME[0]}" "$out" 'Press enter to exit.' || return
     case "$out" in
