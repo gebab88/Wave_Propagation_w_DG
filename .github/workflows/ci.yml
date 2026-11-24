@@ -67,16 +67,19 @@ jobs:
           pacboy: ${{ matrix.compiler }} armadillo:p openblas:p yaml-cpp:p ffmpeg:p
       - name: Show environment
         run: uname -s; uname -m; echo "MSYSTEM=$MSYSTEM"; (g++ --version || clang++ --version) | head -1
-      - name: Frame renderer test
-        run: make test-render
-      - name: Video pipe test
-        run: make test-pipe
       - name: Release and Debug build
         run: make Release Debug
-      - name: Input checks
-        run: make test-input-checks
-      - name: Video tests
-        run: make test-video
+      - name: Run all tests
+        run: make test
+        env:
+          # The ConPTY helper of the menu tests appends the unfiltered console
+          # output here; the next step shows it if a test failed.
+          CONPTY_RUN_RAW: ${{ runner.temp }}/conpty-raw.log
+      - name: Show raw ConPTY output
+        if: failure()
+        run: cat -v "$CONPTY_RUN_RAW" || true
+        env:
+          CONPTY_RUN_RAW: ${{ runner.temp }}/conpty-raw.log
       - name: Start the solver from PowerShell
         # Outside MSYS2: the program must find ffmpeg and its DLLs through PATH alone.
         shell: pwsh

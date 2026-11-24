@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Drives the interactive time-integrator menu in a pseudo-terminal via script(1).
+# Drives the interactive time-integrator menu in a pseudo-terminal via script(1),
+# on Windows in a pseudo console via tests/conpty_run.cpp.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-make Release >/dev/null
+is_windows=0; case "$(uname -s)" in MINGW*|UCRT64*|CLANG64*|CLANGARM64*|MSYS*) is_windows=1 ;; esac
+
+if [[ "$is_windows" == 1 ]]; then make Release conpty-run >/dev/null; else make Release >/dev/null; fi
 
 BIN="$repo_root/bin/Release/DiscontinousGalerkin"
 CFG="$repo_root/tests/menu-test-config.yaml"
@@ -13,6 +16,9 @@ CFG="$repo_root/tests/menu-test-config.yaml"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 cd "$work_dir"   # the solver may write files into the CWD
+
+CONPTY_RUN="$repo_root/bin/Release/conpty_run"
+TTY_CMD_FILE="$work_dir/tty-cmd.sh"
 
 failures=0
 pass() { echo "PASS $1"; }
@@ -24,8 +30,12 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 # Env: TTY_KEY_DELAY (default 0.5) pause before each key, TTY_TAIL (default 1)
 # seconds the input stays open after the last key, TTY_TIMEOUT (default 20).
 # TTY_CLOSE_AFTER: after the last key, wait until this text is in the output;
-# TTY_TAIL then counts from there. When the input closes, script sends ^D;
-# just before that, run_tty creates $TTY_CLOSED_MARKER.
+# TTY_TAIL then counts from there. When the input closes, script sends ^D
+# (conpty_run on Windows: Ctrl+Z, Enter); just before that, run_tty creates
+# $TTY_CLOSED_MARKER.
+# On Windows, cmd goes into $TTY_CMD_FILE for bash, so it needs no quoting for
+# the Windows command line. With CONPTY_RUN_RAW=<file> conpty_run appends the
+# unfiltered console output there; run_tty adds the test name before it.
 TTY_LOG="$work_dir/tty-output.log"
 TTY_CLOSED_MARKER="$work_dir/tty-input-closed"
 run_tty() {
@@ -35,7 +45,11 @@ run_tty() {
     local limit="${TTY_TIMEOUT:-20}"
     local delay="${TTY_KEY_DELAY:-0.5}" tail_s="${TTY_TAIL:-1}"
     local -a script_cmd
-    if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [[ "$is_windows" == 1 ]]; then
+        printf '%q ' "$@" >"$TTY_CMD_FILE"
+        script_cmd=("$CONPTY_RUN" bash "$TTY_CMD_FILE")
+        if [[ -n "${CONPTY_RUN_RAW:-}" ]]; then printf '\n==== %s: %s\n' "${FUNCNAME[1]:-main}" "$*" >>"$CONPTY_RUN_RAW"; fi
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
         script_cmd=(script -q /dev/null "$@")
     else
         local cmd
@@ -57,7 +71,10 @@ run_tty() {
 
 expect_contains() {  # name output needle
     if [[ "$2" == *"$3"* ]]; then return 0; fi
-    fail "$1" "missing '$3'"; return 1
+    fail "$1" "missing '$3'"
+    echo "  first 40 lines of the output:"
+    head -n 40 <<<"$2" | sed 's/^/  | /'
+    return 1
 }
 
 test_key_selects_method() {
@@ -105,14 +122,39 @@ test_arrow_key_single_message() {
     expect_contains "${FUNCNAME[0]}" "$out" 'Using: RungeKuttaClassic' && pass "${FUNCNAME[0]}"
 }
 
+test_function_key_single_message() {
+    local out n; out="$(run_tty $'\033OP' 2 -- "$BIN" "$CFG")"
+    n="$(grep -c 'Invalid key, press 1-5 or Enter.' <<<"$out" || true)"
+    [[ "$n" == 1 ]] || { fail "${FUNCNAME[0]}" "expected 1 invalid message, got $n"; return; }
+    expect_contains "${FUNCNAME[0]}" "$out" 'Using: RungeKuttaClassic' && pass "${FUNCNAME[0]}"
+}
+
 test_ctrl_d_uses_config() {
     local out; out="$(run_tty $'\004' -- "$BIN" "$CFG")"
+    expect_contains "${FUNCNAME[0]}" "$out" 'Using: PredictorCorrectorHeun' && pass "${FUNCNAME[0]}"
+}
+
+# Ctrl+Z ends the input of a Windows console program. A wrongly mapped Ctrl+Z
+# would still end at the config value (the Enter that conpty_run types at the
+# end of the input), so the test also requires that no key was rejected.
+test_ctrl_z_uses_config() {
+    local out n; out="$(run_tty $'\032' -- "$BIN" "$CFG")"
+    n="$(grep -c 'Invalid key, press 1-5 or Enter.' <<<"$out" || true)"
+    [[ "$n" == 0 ]] || { fail "${FUNCNAME[0]}" "expected no invalid message, got $n"; return; }
     expect_contains "${FUNCNAME[0]}" "$out" 'Using: PredictorCorrectorHeun' && pass "${FUNCNAME[0]}"
 }
 
 test_no_tty_skips_menu() {
     local out rc=0; out="$("$BIN" "$CFG" </dev/null 2>&1)" || rc=$?
     [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc"; return; }
+    [[ "$out" != *'Select time integration method'* ]] || { fail "${FUNCNAME[0]}" "menu was shown"; return; }
+    expect_contains "${FUNCNAME[0]}" "$out" 'Using: PredictorCorrectorHeun' && pass "${FUNCNAME[0]}"
+}
+
+# stdin is /dev/null inside a terminal session. On Windows, _isatty() is true
+# for NUL as well; only a console handle has a console mode.
+test_null_stdin_in_terminal_skips_menu() {
+    local out; out="$(run_tty -- sh -c "'$BIN' '$CFG' </dev/null")"
     [[ "$out" != *'Select time integration method'* ]] || { fail "${FUNCNAME[0]}" "menu was shown"; return; }
     expect_contains "${FUNCNAME[0]}" "$out" 'Using: PredictorCorrectorHeun' && pass "${FUNCNAME[0]}"
 }
@@ -184,10 +226,11 @@ test_enter_after_key_does_not_skip_exit_prompt() {
     d="$(mktemp -d)"
     # '2' at 0.3 s and a habitual Enter at 0.6 s, while the solver still runs.
     # The input stays open until 2 s after the exit prompt has appeared; closing
-    # it makes script send ^D, which ends the final cin.get(). Had the queued
-    # Enter answered the prompt, the program would have ended within those 2 s,
-    # before the marker exists. Waiting for the prompt instead of a fixed time
-    # matters when plotting is slow (about 23 s for x64 under QEMU).
+    # it makes script send ^D (conpty_run: Ctrl+Z, Enter), which ends the final
+    # cin.get(). Had the queued Enter answered the prompt, the program would have
+    # ended within those 2 s, before the marker exists. Waiting for the prompt
+    # instead of a fixed time matters when plotting is slow (about 23 s for x64
+    # under QEMU).
     out="$(cd "$d" && TTY_KEY_DELAY=0.3 TTY_CLOSE_AFTER='Press enter to exit.' TTY_TAIL=2 TTY_TIMEOUT=120 \
         run_tty 2 $'\r' -- bash -c "'$BIN' '$plot_cfg'; if [ -e '$TTY_CLOSED_MARKER' ]; then echo exit=after_input_closed; else echo exit=before_input_closed; fi")"
     rm -rf "$d"
@@ -208,7 +251,9 @@ test_menu_visible_when_stdout_redirected() {
 }
 
 # All tests but test_no_tty_skips_menu and test_invalid_config_fails_early need
-# a working terminal from script(1). Under QEMU 7 user emulation, Ubuntu 26.04
+# a working terminal from script(1) (conpty_run on Windows). If MSYS2's bash
+# does not see the pseudo console as a terminal, the solver itself (a native
+# Windows program) decides. Under QEMU 7 user emulation, Ubuntu 26.04
 # (glibc 2.43) gets none, e.g. in the x64 Docker image on Apple Silicon: its
 # tcgetattr() uses the TCGETS2 ioctl, which QEMU 7 does not implement. Without
 # a terminal those tests would fail, or pass for the wrong reason because the
@@ -216,7 +261,11 @@ test_menu_visible_when_stdout_redirected() {
 # (CI is set) they fail instead: there a missing terminal means the test setup
 # is broken, and that must not pass as a skip.
 pty_ok=0
-if [[ "$(run_tty -- sh -c 'test -t 0 && echo pty-ok')" == *pty-ok* ]]; then pty_ok=1; fi
+if [[ "$(run_tty -- sh -c 'test -t 0 && echo pty-ok')" == *pty-ok* ]]; then
+    pty_ok=1
+elif [[ "$is_windows" == 1 && "$(run_tty $'\r' -- "$BIN" "$CFG")" == *'Select time integration method:'* ]]; then
+    pty_ok=1
+fi
 skipped=0
 pty_test() {  # test function
     if (( pty_ok )); then
@@ -228,20 +277,37 @@ pty_test() {  # test function
         skipped=$((skipped + 1))
     fi
 }
+posix_only() {  # test function, reason why it does not apply on Windows
+    if [[ "$is_windows" == 1 ]]; then
+        echo "SKIP $1 ($2)"; skipped=$((skipped + 1))
+    else
+        pty_test "$1"
+    fi
+}
+windows_only() {  # test function, reason why it does not apply on POSIX
+    if [[ "$is_windows" == 1 ]]; then
+        pty_test "$1"
+    else
+        echo "SKIP $1 ($2)"; skipped=$((skipped + 1))
+    fi
+}
 
 pty_test test_key_selects_method
 pty_test test_menu_shows_descriptions
 pty_test test_enter_uses_config
 pty_test test_invalid_key_reprompts
 pty_test test_arrow_key_single_message
+pty_test test_function_key_single_message
 pty_test test_ctrl_d_uses_config
+windows_only test_ctrl_z_uses_config "Ctrl+Z suspends the job on POSIX"
 test_no_tty_skips_menu || true
+pty_test test_null_stdin_in_terminal_skips_menu
 test_invalid_config_fails_early || true
 pty_test test_config_error_before_menu
 pty_test test_prompt_flushed_when_stdout_piped
-pty_test test_ctrl_c_restores_terminal
-pty_test test_ignored_sigint_stays_ignored
-pty_test test_background_job_skips_menu
+posix_only test_ctrl_c_restores_terminal "termios: nothing to restore on Windows"
+posix_only test_ignored_sigint_stays_ignored "POSIX signal disposition"
+posix_only test_background_job_skips_menu "no job control on Windows"
 pty_test test_menu_time_not_in_elapsed
 pty_test test_enter_after_key_does_not_skip_exit_prompt
 pty_test test_menu_visible_when_stdout_redirected
@@ -250,8 +316,4 @@ if [[ $failures -ne 0 ]]; then
     echo "$failures test(s) failed" >&2
     exit 1
 fi
-if (( skipped )); then
-    echo "All integrator menu tests passed ($skipped skipped: no working terminal)."
-else
-    echo "All integrator menu tests passed."
-fi
+echo "All integrator menu tests passed ($skipped skipped)."

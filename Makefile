@@ -124,6 +124,15 @@ test-menu:
 test-video:
 	bash tests/run-video-render.sh
 
+ifeq ($(EXE),.exe)
+# MSYS2 only: the ConPTY helper that runs the menu tests in a pseudo console,
+# as script(1) does on macOS and Linux (see tests/run-integrator-menu.sh).
+conpty-run: bin/Release/conpty_run.exe
+
+bin/Release/conpty_run.exe: tests/conpty_run.cpp
+	$(CXX) -Wall -std=c++14 -O2 tests/conpty_run.cpp -o $@
+endif
+
 TEST_SUITES = test-render test-pipe test-input-checks test-menu test-video
 
 # All test suites, one after the other even under -j (the menu tests depend on
@@ -141,11 +150,11 @@ cleanOBJ:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
 
 cleanBIN:
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/conpty_run$(EXE)
 
 clean:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/conpty_run$(EXE)
 	rm -rf *.png
 	rm -rf *.mp4
 	rm -rf *.dat
@@ -163,4 +172,4 @@ docker-test-linux-arm64:
 docker-test-linux-x64:
 	scripts/docker-linux-test.sh x64 $(UBUNTU)
 
-.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-input-checks test-menu test-video docker-test-linux-arm64 docker-test-linux-x64
+.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-input-checks test-menu test-video conpty-run docker-test-linux-arm64 docker-test-linux-x64

@@ -97,7 +97,7 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
 
-Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 14 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl.
+Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl.
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` unter Ubuntu 24.04 aus, auf x86_64 und auf arm64.
 
