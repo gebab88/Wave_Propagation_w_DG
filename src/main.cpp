@@ -32,7 +32,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <conio.h>
-#include <io.h>
 #endif
 
 using namespace arma;
@@ -194,8 +193,10 @@ static void discardPendingInput() {
 #else
 // ---- Terminal access, Windows ----
 
+// _isatty() is true for NUL as well; only a real console handle has a console mode.
 static bool menuCanReadKeys() {
-    return _isatty(_fileno(stdin)) != 0;
+    DWORD mode = 0;
+    return GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
 }
 
 static int readKeyRaw() {
