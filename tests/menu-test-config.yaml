@@ -1,0 +1,27 @@
+# Config for tests/run-integrator-menu.sh: one tiny time step (runtime < 1 s),
+# no plotting, so the interactive integrator menu can be driven quickly.
+TimeIntegration: PredictorCorrectorHeun
+EnablePlotting: false
+OpenMPMinCells: 50
+OpenMPThreads: 2
+OpenMPLargeMinCells: 512
+OpenMPLargeThreads: 4
+CFLReserve: 0.45
+
+N: 2
+order: 2
+
+t0: 0.0
+t1: 1.0e-5
+
+x0: 0.0
+x1: 0.5
+
+c_0: 300.0
+rho_0: 1.5
+
+freq_i: 3000.0
+
+mu: 0.1
+sigma: 0.02
+height: 1.0

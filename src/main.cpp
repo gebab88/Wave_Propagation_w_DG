@@ -1,13 +1,16 @@
 #include <iostream>
 #include <string>
+#include <array>
 #include <cmath>
 #include <armadillo>
-#include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <chrono>
 #include <stdexcept>
 #include <climits>
+
+#include <termios.h>
+#include <unistd.h>
 
 #include <omp.h>
 #include <yaml-cpp/yaml.h>
@@ -56,6 +59,73 @@ static T cfgGetOr(const YAML::Node &cfg, const char *key, const T &fallback) {
     }
 }
 
+// Time integrators selectable at startup, in menu order.
+static const std::array<const char*, 5> kTimeIntegrators = {
+    "EulerExplicit", "RungeKuttaClassic", "RungeKuttaSecond",
+    "RungeKuttaSecondOrder", "PredictorCorrectorHeun"};
+
+static bool isKnownTimeIntegrator(const std::string &name) {
+    for (const char *known : kTimeIntegrators)
+        if (name == known)
+            return true;
+    return false;
+}
+
+// Read a single byte from stdin without waiting for Enter or echoing it.
+// Returns 0-255, or -1 on EOF/error. The terminal state is always restored.
+static int readKeyRaw() {
+    struct termios saved;
+    if (tcgetattr(STDIN_FILENO, &saved) != 0)
+        return -1;
+    struct termios raw = saved;
+    raw.c_lflag &= ~(ICANON | ECHO);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+
+    cout.flush();
+    unsigned char c = 0;
+    const ssize_t n = read(STDIN_FILENO, &c, 1);
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &saved);
+    return n == 1 ? static_cast<int>(c) : -1;
+}
+
+// Ask for the time integrator with one keypress. Without a terminal on stdin
+// (</dev/null, pipes) the config value is used silently.
+static std::string selectTimeIntegration(const std::string &configDefault) {
+    if (!isatty(STDIN_FILENO)) {
+        cout << "Using: " << configDefault << endl;
+        return configDefault;
+    }
+
+    cout << "Select time integration method:" << endl;
+    for (size_t i = 0; i < kTimeIntegrators.size(); ++i) {
+        cout << "  " << (i + 1) << ") " << kTimeIntegrators[i];
+        if (configDefault == kTimeIntegrators[i])
+            cout << "   (config.yaml)";
+        cout << endl;
+    }
+
+    std::string chosen;
+    while (true) {
+        cout << "Press 1-5, Enter = config.yaml value: " << flush;
+        const int key = readKeyRaw();
+        if (key >= '1' && key <= '5') {
+            chosen = kTimeIntegrators[key - '1'];
+            break;
+        }
+        if (key == '\n' || key == '\r' || key == 0x04 || key == -1) {
+            chosen = configDefault;
+            break;
+        }
+        tcflush(STDIN_FILENO, TCIFLUSH);  // drop the rest of an escape sequence
+        cout << endl << "Invalid key, press 1-5 or Enter." << endl;
+    }
+    cout << endl << "Using: " << chosen << endl;
+    return chosen;
+}
+
 
 int main( int argc, char *argv[] ){
     chrono::time_point<chrono::system_clock> StartTime, EndTimeCalc,EndTimePlot;
@@ -91,7 +161,12 @@ int main( int argc, char *argv[] ){
         }
     }
 
-    const std::string TimeIntegration = cfgGet<std::string>(cfg, "TimeIntegration");
+    const std::string configTimeIntegration = cfgGet<std::string>(cfg, "TimeIntegration");
+    if (!isKnownTimeIntegrator(configTimeIntegration)) {
+        cerr << "Config error: unknown TimeIntegration '" << configTimeIntegration << "'" << endl;
+        return 1;
+    }
+    const std::string TimeIntegration = selectTimeIntegration(configTimeIntegration);
 
     const float  CFLReserve = cfgGet<float>(cfg, "CFLReserve");
 
