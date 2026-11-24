@@ -69,3 +69,5 @@ jobs:
         run: uname -s; uname -m; echo "MSYSTEM=$MSYSTEM"; (g++ --version || clang++ --version) | head -1
       - name: Frame renderer test
         run: make test-render
+      - name: Video pipe test
+        run: make test-pipe

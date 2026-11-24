@@ -1,13 +1,12 @@
 #include "ClassPlot.hpp"
 #include "FrameRenderer.hpp"
+#include "VideoPipe.hpp"
 #include <algorithm>
-#include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
 #include <string>
 #include <system_error>
-#include <sys/wait.h>
 #include <thread>
 #include <vector>
 
@@ -51,10 +50,10 @@ bool ClassPlot::RenderVideo(const std::string &filename)
         "ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s "
         + std::to_string(FrameRenderer::kWidth) + "x"
         + std::to_string(FrameRenderer::kHeight) + " "
-        "-framerate 60 -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p '"
-        + filename + "'";
+        "-framerate 60 -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p "
+        + shellQuote(filename);
     std::fflush(stdout);
-    FILE *pipe = popen(cmd.c_str(), "w");
+    FILE *pipe = openWritePipe(cmd);
     if (!pipe) {
         std::cout << "Video encoding failed (could not start ffmpeg). "
                      "Is ffmpeg on the PATH?" << std::endl;
@@ -62,7 +61,7 @@ bool ClassPlot::RenderVideo(const std::string &filename)
     }
 
     // A dead ffmpeg must surface as a short write, not kill us with SIGPIPE.
-    void (*oldHandler)(int) = std::signal(SIGPIPE, SIG_IGN);
+    SigpipeIgnored sigpipeGuard;
     bool writeOk = true;
 
     for (std::size_t first = 0; first < nframes && writeOk; first += batch) {
@@ -102,18 +101,17 @@ bool ClassPlot::RenderVideo(const std::string &filename)
             writeOk = false;
     }
 
-    const int status = pclose(pipe);
-    std::signal(SIGPIPE, oldHandler);
+    const PipeStatus status = closeWritePipe(pipe);
 
-    if (status != 0) {
+    if (status.kind != PipeStatus::Exited || status.value != 0) {
         std::cout << "Video encoding failed (";
-        if (WIFEXITED(status))
-            std::cout << "ffmpeg returned " << WEXITSTATUS(status)
+        if (status.kind == PipeStatus::Exited)
+            std::cout << "ffmpeg returned " << status.value
                       << "). Is ffmpeg on the PATH?";
-        else if (WIFSIGNALED(status))
-            std::cout << "ffmpeg killed by signal " << WTERMSIG(status) << ").";
+        else if (status.kind == PipeStatus::Signaled)
+            std::cout << "ffmpeg killed by signal " << status.value << ").";
         else
-            std::cout << "ffmpeg failed, status " << status << ").";
+            std::cout << "ffmpeg failed, status " << status.value << ").";
         std::cout << std::endl;
         return false;
     }

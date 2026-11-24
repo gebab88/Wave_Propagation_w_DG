@@ -72,7 +72,7 @@ UNAME:=$(shell uname -a)
 
 # Explicit object lists; the pattern rules below build each object.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
-OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o
+OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o obj/Release/VideoPipe.o
 BIN= bin/Release/DiscontinousGalerkin$(EXE)
 DEBUG_OBJS= $(OBJS:obj/Release/%=obj/Debug/%)
 DEBUG_BIN= bin/Debug/DiscontinousGalerkin$(EXE)
@@ -106,7 +106,12 @@ obj/Debug/%.o: src/%.cpp $(HEADERS)
 # Plain C++ test for the frame renderer (no Armadillo needed).
 test-render: obj/Release/FrameRenderer.o tests/test_frame_renderer.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
-	bin/Release/test_frame_renderer
+	bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
+
+# Plain C++ test for the ffmpeg pipe module (byte-exact, no Armadillo needed).
+test-pipe: obj/Release/VideoPipe.o tests/test_video_pipe.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_video_pipe.cpp obj/Release/VideoPipe.o -o bin/Release/test_video_pipe$(EXE)
+	bin/Release/test_video_pipe$(EXE)
 
 # Shell test suites. Each script builds bin/Release itself and exits non-zero
 # when one of its tests fails.
@@ -119,7 +124,7 @@ test-menu:
 test-video:
 	bash tests/run-video-render.sh
 
-TEST_SUITES = test-render test-input-checks test-menu test-video
+TEST_SUITES = test-render test-pipe test-input-checks test-menu test-video
 
 # All test suites, one after the other even under -j (the menu tests depend on
 # timing). Every suite runs even if an earlier one failed; the target fails if
@@ -136,11 +141,11 @@ cleanOBJ:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
 
 cleanBIN:
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
 
 clean:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
 	rm -rf *.png
 	rm -rf *.mp4
 	rm -rf *.dat
@@ -158,4 +163,4 @@ docker-test-linux-arm64:
 docker-test-linux-x64:
 	scripts/docker-linux-test.sh x64 $(UBUNTU)
 
-.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-input-checks test-menu test-video docker-test-linux-arm64 docker-test-linux-x64
+.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-input-checks test-menu test-video docker-test-linux-arm64 docker-test-linux-x64
