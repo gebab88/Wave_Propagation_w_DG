@@ -493,81 +493,50 @@ int main( int argc, char *argv[] ){
     vec X=U0;
   //dXdtObj.FluidMatrix(U0, dXdt0, t1);
     double t= t0;
-    //Integration with RungeKutta
-    vec TimeSteps={t};
-    vec TimeStep(1);
-    const uvec pressureDofs = regspace<uvec>(0, 2, X.n_elem - 2);
-    auto pressureSnapshot = [&X, &pressureDofs]() -> rowvec {
-        return trans(X.elem(pressureDofs));
-    };
-
-    X=U0;
-    t=t0;
-    TimeSteps={t};
-    mat pressureSolution={pressureSnapshot()};
-
-    if (TimeIntegration=="EulerExplicit"){
-        do {
-            dXdtObj.EulerExplicitClassic(X, t);
-            TimeStep[0]=t;
-            pressureSolution=join_vert(pressureSolution,pressureSnapshot());
-            TimeSteps=join_vert(TimeSteps,TimeStep);
-            //X.print("X= ");
-            cout<<"t=" << t<<endl;
-            } while (t< t1);
-    }
-    else if(TimeIntegration=="RungeKuttaClassic"){
-        do{
-            //vec X1=X;
-            dXdtObj.RungeKuttaIntegrationClassic(X, t);
-            TimeStep[0]=t;
-            //vec Xdiff=X1-X;
-            //Xdiff.print("Xdiff= ");
-            pressureSolution=join_vert(pressureSolution,pressureSnapshot());
-            TimeSteps=join_vert(TimeSteps,TimeStep);
-            //cout<<"t=" << t<<endl;
-            //printf("t= %f0 \n",t);
-        } while (t<t1);
-    }
-    else if(TimeIntegration=="RungeKuttaSecond") {
-        do {
-            //vec X1=X;
-            dXdtObj.RungeKuttaIntegrationSecondVersion(X, t);
-            TimeStep[0] = t;
-            //vec Xdiff=X1-X;
-            //Xdiff.print("Xdiff= ");
-            pressureSolution = join_vert(pressureSolution, pressureSnapshot());
-            TimeSteps = join_vert(TimeSteps, TimeStep);
-            //printf("t= %f0 \n",t);
-        } while (t < t1);
-        //cout<<"Sorry, this is still a stub"<<endl;
-        //exit(EXIT_FAILURE);
-    }
-
-    else if(TimeIntegration=="RungeKuttaSecondOrder"){
-        do{
-                dXdtObj.RungeKuttaSecondOrderHeun(X,t);
-                TimeStep[0]=t;
-                pressureSolution=join_vert(pressureSolution,pressureSnapshot());
-                TimeSteps=join_vert(TimeSteps,TimeStep);
-            } while  (t<t1);
-    }
-
-    else if(TimeIntegration=="PredictorCorrectorHeun"){
-        do{
-            //vec X1=X;
-            dXdtObj.PredictorCorrectorHeun(X, t);
-            TimeStep[0]=t;
-            pressureSolution=join_vert(pressureSolution,pressureSnapshot());
-            TimeSteps=join_vert(TimeSteps,TimeStep);
-            //cout<<"t=" << t<<endl;
-            //printf("t= %f0 \n",t);
-        } while (t<t1);
-    }
-    else{
+    // Integrate. Each step's pressure field is stored as one column of a
+    // preallocated buffer (contiguous in Armadillo's column-major layout);
+    // growing the result with join_vert would copy everything every step.
+    using StepFn = void (ClassdXdt::*)(vec &, double &);
+    StepFn step = nullptr;
+    if      (TimeIntegration=="EulerExplicit")          step = &ClassdXdt::EulerExplicitClassic;
+    else if (TimeIntegration=="RungeKuttaClassic")      step = &ClassdXdt::RungeKuttaIntegrationClassic;
+    else if (TimeIntegration=="RungeKuttaSecond")       step = &ClassdXdt::RungeKuttaIntegrationSecondVersion;
+    else if (TimeIntegration=="RungeKuttaSecondOrder")  step = &ClassdXdt::RungeKuttaSecondOrderHeun;
+    else if (TimeIntegration=="PredictorCorrectorHeun") step = &ClassdXdt::PredictorCorrectorHeun;
+    else {
         cout << "The TimeIntegration variable isn't defined correctly!" << endl;
         exit(EXIT_FAILURE);
     }
+    const bool printEachStep = (TimeIntegration=="EulerExplicit");
+
+    const uvec pressureDofs = regspace<uvec>(0, 2, X.n_elem - 2);
+    // t advances by deltaT per step (accumulated in floating point), so the
+    // count is only estimated; the buffers grow if it falls short.
+    uword capacity = static_cast<uword>(std::ceil(std::max(0.0, (t1 - t0) / deltaT))) + 2;
+    mat snapshots(pressureDofs.n_elem, capacity);
+    vec TimeSteps(capacity);
+    uword nSnapshots = 0;
+    auto storeSnapshot = [&]() {
+        if (nSnapshots == capacity) {
+            capacity *= 2;
+            snapshots.resize(snapshots.n_rows, capacity);
+            TimeSteps.resize(capacity);
+        }
+        snapshots.col(nSnapshots) = X.elem(pressureDofs);
+        TimeSteps[nSnapshots] = t;
+        ++nSnapshots;
+    };
+
+    storeSnapshot();   // initial state at t0
+    do {
+        (dXdtObj.*step)(X, t);
+        storeSnapshot();
+        if (printEachStep) cout << "t=" << t << endl;
+    } while (t < t1);
+
+    TimeSteps.resize(nSnapshots);
+    const mat pressureSolution = trans(snapshots.cols(0, nSnapshots - 1));  // rows = time steps
+    snapshots.reset();
 
     //X.save("X.dat",raw_ascii);
     //pressureSolution.print("Pressure solution =");

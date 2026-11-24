@@ -106,7 +106,7 @@ mkdir -p run && cd run
 ../bin/Release/DiscontinousGalerkin </dev/null   # findet config.yaml automatisch
 ```
 
-Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **18 s** (Simulation ~5 s, Plotten + Video ~13 s).
+Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **13 s** (Simulation <1 s, Plotten + Video ~13 s).
 
 Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`.
 
