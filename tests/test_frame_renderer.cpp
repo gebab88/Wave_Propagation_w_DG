@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <unistd.h>
 #include <vector>
 
 static int failures = 0;
@@ -48,6 +49,15 @@ static void test_nice_ticks() {
     CHECK(t3.size() >= 4 && t3.size() <= 11);
     CHECK(niceTicks(1.0, 1.0, 11).size() == 1);
     report("test_nice_ticks", before);
+}
+
+static void test_nice_ticks_large_offset() {
+    int before = failures;
+    alarm(5);  // a regression hangs; fail instead
+    auto t = niceTicks(1e17, 1e17 + 64, 11);
+    alarm(0);
+    CHECK(t.size() <= 11);
+    report("test_nice_ticks_large_offset", before);
 }
 
 static void test_background_layout() {
@@ -176,6 +186,7 @@ static void test_segment_crossing_edge() {
 
 int main() {
     test_nice_ticks();
+    test_nice_ticks_large_offset();
     test_background_layout();
     test_render_curve();
     test_nonfinite_and_huge_values();

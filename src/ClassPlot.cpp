@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <iostream>
 #include <string>
+#include <system_error>
+#include <sys/wait.h>
 #include <thread>
 #include <vector>
 
@@ -41,12 +43,14 @@ bool ClassPlot::RenderVideo(const std::string &filename)
     const std::size_t fbytes = renderer.frameBytes();
 
     unsigned nthreads = std::thread::hardware_concurrency();
-    if (nthreads == 0) nthreads = 4;
+    nthreads = (nthreads == 0) ? 4u : std::min(nthreads, 8u);  // cap batch memory
     const std::size_t batch = 4 * static_cast<std::size_t>(nthreads);
     std::vector<std::uint8_t> buffer(batch * fbytes);
 
     const std::string cmd =
-        "ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s 800x600 "
+        "ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s "
+        + std::to_string(FrameRenderer::kWidth) + "x"
+        + std::to_string(FrameRenderer::kHeight) + " "
         "-framerate 60 -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p '"
         + filename + "'";
     std::fflush(stdout);
@@ -78,23 +82,44 @@ bool ClassPlot::RenderVideo(const std::string &filename)
         {
             std::vector<std::thread> pool;
             pool.reserve(nthreads);
-            for (unsigned t = 0; t < nthreads; ++t)
-                pool.emplace_back(worker, t);
+            unsigned started = 0;
+            try {
+                for (unsigned t = 0; t < nthreads; ++t) {
+                    pool.emplace_back(worker, t);
+                    ++started;
+                }
+            } catch (const std::system_error &) {
+                // Could not start every thread: the missing slices are
+                // rendered below on the calling thread.
+            }
             for (auto &th : pool)
                 th.join();
+            for (unsigned t = started; t < nthreads; ++t)
+                worker(t);
         }
 
         if (std::fwrite(buffer.data(), fbytes, count, pipe) != count)
             writeOk = false;
     }
 
+    const int status = pclose(pipe);
     std::signal(SIGPIPE, oldHandler);
-    int ret = pclose(pipe);
-    if (ret == 0 && !writeOk) ret = -1;
 
-    if (ret != 0) {
-        std::cout << "Video encoding failed (ffmpeg returned " << ret
-                  << "). Is ffmpeg on the PATH?" << std::endl;
+    if (status != 0) {
+        std::cout << "Video encoding failed (";
+        if (WIFEXITED(status))
+            std::cout << "ffmpeg returned " << WEXITSTATUS(status)
+                      << "). Is ffmpeg on the PATH?";
+        else if (WIFSIGNALED(status))
+            std::cout << "ffmpeg killed by signal " << WTERMSIG(status) << ").";
+        else
+            std::cout << "ffmpeg failed, status " << status << ").";
+        std::cout << std::endl;
+        return false;
+    }
+    if (!writeOk) {
+        std::cout << "Video encoding failed (could not write all frames to ffmpeg)."
+                  << std::endl;
         return false;
     }
     std::cout << "Video written to " << filename << std::endl;

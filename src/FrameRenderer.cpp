@@ -188,7 +188,11 @@ std::vector<double> niceTicks(double lo, double hi, int maxTicks) {
             const double count = kHi - kLo + 1.0;
             if (count < 1.0 || count >= maxTicks) continue;
             std::vector<double> ticks;
-            for (double k = kLo; k <= kHi; k += 1.0) ticks.push_back(k == 0.0 ? 0.0 : k * step);  // avoid a "-0" label
+            const int n = static_cast<int>(count);  // < maxTicks, so bounded
+            for (int i = 0; i < n; ++i) {
+                const double k = kLo + i;
+                ticks.push_back(k == 0.0 ? 0.0 : k * step);  // avoid a "-0" label
+            }
             return ticks;
         }
     }
