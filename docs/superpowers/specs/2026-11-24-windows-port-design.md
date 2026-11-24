@@ -84,9 +84,18 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
     „Invalid key“. Unter POSIX prüft das `test_arrow_key_single_message`.
 - **Eingabe leeren:** nach einer ungültigen Taste und vor dem Exit-Prompt, über
   `FlushConsoleInputBuffer`.
-- **Strg+C:** Der Konsolenmodus wird nie dauerhaft geändert, also gibt es nichts
-  wiederherzustellen. Das Programm endet wie jedes Konsolenprogramm. Ein
-  Gegenstück zum SIGINT-Handler gibt es nicht.
+- **Strg+C:** Das Programm endet wie jedes Konsolenprogramm. Der
+  Standard-Handler greift im Menü aber nicht: Während `_getch()` wartet, setzt
+  die UCRT den Konsolenmodus auf 0, also ist auch `ENABLE_PROCESSED_INPUT` aus.
+  Strg+C kommt dann als Taste 3 an, und die Konsole löst kein `CTRL_C_EVENT`
+  aus. Bei Taste 3 beendet das Menü das Programm deshalb selbst mit
+  `ExitProcess(STATUS_CONTROL_C_EXIT)`, wie es der Standard-Handler täte. Den
+  Konsolenmodus hat `_getch()` dann schon wiederhergestellt, es bleibt nichts
+  zurückzusetzen. `GenerateConsoleCtrlEvent` mit erneutem Lesen scheidet aus:
+  Das Ereignis kommt asynchron und könnte das Programm erst im nächsten
+  `_getch()` beenden, mit Konsolenmodus 0. Die MSYS2-bash sieht Status 130 wie
+  unter POSIX, weil die MSYS2-Laufzeit `STATUS_CONTROL_C_EXIT` auf SIGINT
+  abbildet. Das prüft `test_ctrl_c_ends_windows_menu`.
 - **Hintergrundjobs:** Unter Windows gibt es keine; die Prüfung über `tcgetpgrp`
   entfällt.
 
@@ -153,6 +162,10 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
     - `test_ctrl_c_restores_terminal` (termios),
     - `test_ignored_sigint_stays_ignored` (Signal-Disposition),
     - `test_background_job_skips_menu` (Job-Control).
+
+    Umgekehrt prüft `test_ctrl_c_ends_windows_menu` Strg+C nur unter Windows;
+    unter POSIX entfällt er mit SKIP, dort prüft das
+    `test_ctrl_c_restores_terminal`.
   - Jeder SKIP nennt seinen Grund. `make test` endet unter Windows mit exit 0,
     solange kein Test fehlschlägt.
 - **ConPTY-Testhelfer** (`tests/conpty_run.cpp`, nur unter Windows gebaut, vom
@@ -199,8 +212,8 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
 - Die Windows-Jobs laufen wie die Linux-Jobs mit `fail-fast: false`.
 - Die drei POSIX-spezifischen Menü-Tests werden unter Windows übersprungen und
   nicht nachgebaut. Zusammen mit `test_memory_bounded` aus den Video-Tests
-  (siehe oben) sind es vier SKIPs in `make test`. Strg+C beendet das Programm dort ohnehin nur über den
-  Standard-Handler.
+  (siehe oben) sind es vier SKIPs in `make test`. Strg+C prüft unter Windows ein
+  eigener Test, `test_ctrl_c_ends_windows_menu` (siehe „Strg+C“ oben).
 - `make` kommt aus der MSYS-Umgebung (Paket `make`), nicht `mingw32-make`.
 
 ## Befunde aus der CI
@@ -223,6 +236,18 @@ Das war bei der Umsetzung offen und ist in der CI geklärt (beide Windows-Jobs g
 - Die Menü-Tests laufen unter Windows über den ConPTY-Helfer. Windows-SKIPs:
   `test_memory_bounded`, `test_ctrl_c_restores_terminal`,
   `test_ignored_sigint_stays_ignored`, `test_background_job_skips_menu`.
+- Die Terminal-Probe von `run-integrator-menu.sh` (`test -t 0`) stimmt auch mit
+  dem ConPTY-Helfer: Die MSYS2-bash sieht die Pseudokonsole als Terminal.
+  Schlüge die Probe fehl, prüft das Skript unter Windows ersatzweise, ob das
+  Menü des Solvers erscheint.
+- Strg+C im Menü kam als Taste 3 an, das Menü meldete „Invalid key“ und lief
+  weiter (`test_ctrl_c_ends_windows_menu` war rot). Seit
+  `ExitProcess(STATUS_CONTROL_C_EXIT)` endet das Programm, und die MSYS2-bash
+  sieht Status 130.
+- argv[0] enthält unter Windows Backslashes, beim Start aus PowerShell wie aus
+  der MSYS2-bash. Die Suche nach `config.yaml` neben der Binary trennte nur an
+  `/` und fand die Datei nicht; `test_config_found_next_to_binary` und der
+  PowerShell-Schritt ohne Argument waren rot. Jetzt trennt sie an `/` und `\`.
 
 ## Offen
 
@@ -234,16 +259,14 @@ Das war bei der Umsetzung offen und ist in der CI geklärt (beide Windows-Jobs g
   bleibt als Absicherung, aber nur unter POSIX ist die Gegenprobe wirksam.
 - Erscheint das Menü auch im MSYS2-Terminal (mintty)? Die CI kann das nicht
   prüfen; das README sagt es so.
-- `run-integrator-menu.sh` prüft vorab, ob `run_tty` ein funktionierendes
-  Terminal liefert (`test -t 0`). Ohne Terminal überspringt es die
-  Terminal-Tests; in der CI (`CI` gesetzt) schlagen sie dann fehl. Die Probe muss
-  auch mit dem ConPTY-Helfer stimmen. Gegebenenfalls prüft sie unter Windows mit
-  einem nativen Programm, ob `GetConsoleMode` gelingt.
+- Ein echtes Zeichen 0xE0 in der Codepage der Konsoleneingabe (CP850 „Ó“,
+  CP437 „α“) hält das Menü für das Präfix einer Sondertaste und verschluckt die
+  nächste Taste. Das ist selten und wird hingenommen.
 
 ## Prüfung
 
-- **macOS:** `make test` ist grün (53 PASS, nur der SKIP von
-  `test_ctrl_z_uses_config`).
+- **macOS:** `make test` ist grün (54 PASS, nur die SKIPs von
+  `test_ctrl_z_uses_config` und `test_ctrl_c_ends_windows_menu`).
 - **Linux:** Die CI (x86_64, arm64) und die Docker-Images (Ubuntu 24.04/26.04,
   arm64/x64) sind grün wie bisher.
 - **Windows (CI, beide Runner):**
@@ -261,3 +284,8 @@ Das war bei der Umsetzung offen und ist in der CI geklärt (beide Windows-Jobs g
     `test_arrow_key_single_message` fehlschlagen.
   - Ohne `FlushConsoleInputBuffer` am Exit-Prompt muss
     `test_enter_after_key_does_not_skip_exit_prompt` fehlschlagen.
+  - Ohne die Behandlung von Taste 3 muss `test_ctrl_c_ends_windows_menu`
+    fehlschlagen.
+  - Mit `find_last_of('/')` müssen unter Windows
+    `test_config_found_next_to_binary` und der PowerShell-Schritt ohne Argument
+    fehlschlagen.

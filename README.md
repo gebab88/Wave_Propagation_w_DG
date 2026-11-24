@@ -41,6 +41,7 @@ Ausführliche technische Dokumentation mit Herleitung, Stabilitätsgrenzen und g
 | `src/vandermonde.{cpp,hpp}` | Vandermonde- & Differentiationsmatrix (für die Steifigkeitsmatrix) |
 | `src/FrameRenderer.{cpp,hpp}` | Zeichnet die Video-Frames: Achsen, Gitter, Kurve |
 | `src/ClassPlot.{cpp,hpp}` | Paralleles Zeichnen der Frames, Streaming der rohen Frames nach ffmpeg |
+| `src/VideoPipe.{cpp,hpp}` | Pipe zu ffmpeg: Starten, Quoting, Exit-Status, je eine Variante für POSIX und Windows |
 | `Makefile` | Build (für macOS / MacPorts konfiguriert) |
 
 ---
@@ -93,11 +94,12 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 | Target | Datei | Prüft |
 |---|---|---|
 | `make test-render` | `tests/test_frame_renderer.cpp` | Frame-Renderer (C++-Unit-Tests) |
+| `make test-pipe` | `tests/test_video_pipe.cpp` | Pipe zu ffmpeg: Bytes kommen unverändert an, Exit-Status (C++-Unit-Tests) |
 | `make test-input-checks` | `tests/run-input-checks.sh` | Eingabeprüfung und Abbruch instabiler Rechnungen |
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
 
-Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl. `test_ctrl_z_uses_config` wird unter macOS und Linux immer übersprungen, weil Strg+Z dort den Job anhält. Unter Windows laufen die Menü-Tests über `tests/conpty_run.cpp` (ConPTY) statt über `script`; dort entfallen `test_memory_bounded`, `test_ctrl_c_restores_terminal`, `test_ignored_sigint_stays_ignored` und `test_background_job_skips_menu`, weil sie POSIX-Verhalten oder `time(1)` voraussetzen.
+Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl. `test_ctrl_z_uses_config` wird unter macOS und Linux immer übersprungen, weil Strg+Z dort den Job anhält. Ebenso `test_ctrl_c_ends_windows_menu`: Es prüft Strg+C unter Windows, unter macOS und Linux tut das `test_ctrl_c_restores_terminal`. Unter Windows laufen die Menü-Tests über `tests/conpty_run.cpp` (ConPTY) statt über `script`; dort entfallen `test_memory_bounded`, `test_ctrl_c_restores_terminal`, `test_ignored_sigint_stays_ignored` und `test_background_job_skips_menu`, weil sie POSIX-Verhalten oder `time(1)` voraussetzen.
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` aus: unter Ubuntu 24.04 auf x86_64 und auf arm64 sowie unter Windows 11 mit MSYS2 auf x64 (`windows-2025`, UCRT64) und auf ARM64 (`windows-11-arm`, CLANGARM64). Die Windows-Jobs starten das fertige Programm außerdem aus PowerShell, also außerhalb von MSYS2.
 
@@ -173,7 +175,7 @@ bin/Release/DiscontinousGalerkin.exe
 
 - **Starten außerhalb von MSYS2** (Windows Terminal, PowerShell, cmd): Das `bin`-Verzeichnis der Umgebung muss im `PATH` stehen, zum Beispiel `C:\msys64\ucrt64\bin` bzw. `C:\msys64\clangarm64\bin`. Dort liegen die DLLs. Die CI startet das Programm so aus PowerShell.
 - **ffmpeg** muss im `PATH` liegen. Es kann aus MSYS2 stammen (siehe oben) oder aus einer anderen Quelle. Das Programm startet es über `cmd.exe`. Fehlt es, erscheint `Video encoding failed …`, und die Rechnung läuft trotzdem durch.
-- **Integrator-Menü:** Es erscheint, wenn stdin eine Windows-Konsole ist, also in Windows Terminal, PowerShell und cmd. Taste `1`–`5` wählt ein Verfahren, Enter oder Strg+Z übernimmt den Wert aus der Config. Kommt die Eingabe aus einer Pipe oder von `NUL`, wird das Menü übersprungen und der Config-Wert gilt, angezeigt durch die Zeile `Using: …`.
+- **Integrator-Menü:** Es erscheint, wenn stdin eine Windows-Konsole ist, also in Windows Terminal, PowerShell und cmd. Taste `1`–`5` wählt ein Verfahren, Enter oder Strg+Z übernimmt den Wert aus der Config, Strg+C beendet das Programm. Kommt die Eingabe aus einer Pipe oder von `NUL`, wird das Menü übersprungen und der Config-Wert gilt, angezeigt durch die Zeile `Using: …`.
 - **mintty** (das Standardfenster der MSYS2-Shells): Ob das Menü dort erscheint, ist nicht geprüft, denn die CI hat keine mintty-Sitzung. Erscheint es nicht, gilt der Config-Wert; das Menü bekommt man dann sicher in Windows Terminal, PowerShell oder cmd.
 - **Tests:** `make test` läuft wie unter Linux. Die Menü-Tests nutzen ConPTY, der Speichertest entfällt (siehe [Tests](#tests)).
 
