@@ -300,7 +300,8 @@ int main( int argc, char *argv[] ){
         bool recovered = false;
         if (argc <= 1) {   // fall back to the config shipped next to the executable
             std::string exe = argv[0];
-            auto slash = exe.find_last_of('/');
+            // On Windows, argv[0] usually separates with backslashes.
+            auto slash = exe.find_last_of("/\\");
             std::string exeDir = (slash == std::string::npos) ? std::string(".") : exe.substr(0, slash);
             std::string alt = exeDir + "/../../config.yaml";
             try { cfg = YAML::LoadFile(alt); configPath = alt; recovered = true; }
