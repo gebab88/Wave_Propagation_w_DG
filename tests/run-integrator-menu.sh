@@ -100,6 +100,32 @@ test_prompt_flushed_when_stdout_piped() {
     pass "${FUNCNAME[0]}"
 }
 
+test_ctrl_c_restores_terminal() {
+    local out; out="$(run_tty $'\003' -- sh -c "trap ':' INT; '$BIN' '$CFG'; echo status=\$?; stty -a")"
+    expect_contains "${FUNCNAME[0]}" "$out" 'status=130' || return
+    if grep -qE -- '(^|[[:space:]])-(icanon|echo)([[:space:];]|$)' <<<"$out"; then
+        fail "${FUNCNAME[0]}" "terminal left in raw mode"; return
+    fi
+    grep -qE '(^|[[:space:]])icanon([[:space:];]|$)' <<<"$out" || { fail "${FUNCNAME[0]}" "no icanon in stty output"; return; }
+    grep -qE '(^|[[:space:]])echo([[:space:];]|$)' <<<"$out" || { fail "${FUNCNAME[0]}" "no echo in stty output"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
+test_ignored_sigint_stays_ignored() {
+    local out; out="$(run_tty $'\003' 2 -- sh -c "trap '' INT; '$BIN' '$CFG'; echo status=\$?")"
+    expect_contains "${FUNCNAME[0]}" "$out" 'Using: RungeKuttaClassic' &&
+    expect_contains "${FUNCNAME[0]}" "$out" 'status=0' &&
+    pass "${FUNCNAME[0]}"
+}
+
+test_background_job_skips_menu() {
+    local out; out="$(run_tty -- bash -c "set -m; '$BIN' '$CFG' & wait \$!; echo status=\$?")"
+    [[ "$out" != *'Select time integration method'* ]] || { fail "${FUNCNAME[0]}" "menu was shown"; return; }
+    expect_contains "${FUNCNAME[0]}" "$out" 'status=0' &&
+    expect_contains "${FUNCNAME[0]}" "$out" 'Using: PredictorCorrectorHeun' &&
+    pass "${FUNCNAME[0]}"
+}
+
 test_key_selects_method || true
 test_enter_uses_config || true
 test_invalid_key_reprompts || true
@@ -108,6 +134,9 @@ test_ctrl_d_uses_config || true
 test_no_tty_skips_menu || true
 test_invalid_config_fails_early || true
 test_prompt_flushed_when_stdout_piped || true
+test_ctrl_c_restores_terminal || true
+test_ignored_sigint_stays_ignored || true
+test_background_job_skips_menu || true
 
 if [[ $failures -ne 0 ]]; then
     echo "$failures test(s) failed" >&2

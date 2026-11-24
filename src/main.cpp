@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <climits>
 
+#include <csignal>
+#include <cerrno>
 #include <termios.h>
 #include <unistd.h>
 
@@ -71,12 +73,37 @@ static bool isKnownTimeIntegrator(const std::string &name) {
     return false;
 }
 
+// Terminal state to restore if SIGINT arrives while the terminal is in raw mode.
+static struct termios g_savedTermios;
+
+// Only async-signal-safe calls: restore the terminal, re-arm the default
+// action and re-raise, so the process still dies from SIGINT (status 130).
+static void restoreTerminalOnSigint(int) {
+    tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTermios);
+    signal(SIGINT, SIG_DFL);
+    raise(SIGINT);
+}
+
 // Read a single byte from stdin without waiting for Enter or echoing it.
-// Returns 0-255, or -1 on EOF/error. The terminal state is always restored.
+// Returns 0-255, or -1 on EOF/error. The terminal state and the previous
+// SIGINT disposition are always restored.
 static int readKeyRaw() {
     struct termios saved;
     if (tcgetattr(STDIN_FILENO, &saved) != 0)
         return -1;
+    g_savedTermios = saved;
+
+    // Install the handler only if SIGINT is not ignored (nohup, trap "" INT).
+    struct sigaction oldAct;
+    bool handlerInstalled = false;
+    if (sigaction(SIGINT, nullptr, &oldAct) == 0 && oldAct.sa_handler != SIG_IGN) {
+        struct sigaction act;
+        act.sa_handler = restoreTerminalOnSigint;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = 0;
+        handlerInstalled = (sigaction(SIGINT, &act, nullptr) == 0);
+    }
+
     struct termios raw = saved;
     raw.c_lflag &= ~(ICANON | ECHO);
     raw.c_cc[VMIN] = 1;
@@ -85,16 +112,22 @@ static int readKeyRaw() {
 
     cout.flush();
     unsigned char c = 0;
-    const ssize_t n = read(STDIN_FILENO, &c, 1);
+    ssize_t n;
+    do {
+        n = read(STDIN_FILENO, &c, 1);
+    } while (n < 0 && errno == EINTR);
 
     tcsetattr(STDIN_FILENO, TCSANOW, &saved);
+    if (handlerInstalled)
+        sigaction(SIGINT, &oldAct, nullptr);
     return n == 1 ? static_cast<int>(c) : -1;
 }
 
 // Ask for the time integrator with one keypress. Without a terminal on stdin
-// (</dev/null, pipes) the config value is used silently.
+// (</dev/null, pipes) or when running as a background job (reading the
+// terminal would stop us with SIGTTIN/SIGTTOU) the config value is used silently.
 static std::string selectTimeIntegration(const std::string &configDefault) {
-    if (!isatty(STDIN_FILENO)) {
+    if (!isatty(STDIN_FILENO) || tcgetpgrp(STDIN_FILENO) != getpgrp()) {
         cout << "Using: " << configDefault << endl;
         return configDefault;
     }
