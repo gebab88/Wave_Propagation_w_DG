@@ -106,7 +106,7 @@ obj/Debug/%.o: src/%.cpp $(HEADERS)
 # Plain C++ test for the frame renderer (no Armadillo needed).
 test-render: obj/Release/FrameRenderer.o tests/test_frame_renderer.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
-	bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE)
+	bin/Release/test_frame_renderer
 
 # Plain C++ test for the ffmpeg pipe module (byte-exact, no Armadillo needed).
 test-pipe: obj/Release/VideoPipe.o tests/test_video_pipe.cpp $(HEADERS)
