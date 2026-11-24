@@ -57,7 +57,7 @@ UNAME:=$(shell uname -a)
 
 # Explicit object list so the per-file rules below are actually triggered.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
-OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o
+OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o
 BIN= bin/Release/DiscontinousGalerkin
 
 # Rebuild objects when any header changes (the rules below don't track #includes
@@ -88,6 +88,13 @@ obj/Release/vandermonde.o: src/vandermonde.cpp $(HEADERS)
 obj/Release/ClassPlot.o: src/ClassPlot.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) -c $< -o obj/Release/ClassPlot.o
 
+obj/Release/FrameRenderer.o: src/FrameRenderer.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) -c $< -o obj/Release/FrameRenderer.o
+
+# Plain C++ test for the frame renderer (no Armadillo needed).
+test-render: obj/Release/FrameRenderer.o tests/test_frame_renderer.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
+	bin/Release/test_frame_renderer
 
 video:
 	#@echo 'Programm is runnung on System' $(UNAME)
@@ -114,4 +121,4 @@ cleanPictures:
 docker-test-linux-arm64:
 	scripts/docker-linux-arm64-test.sh
 
-.PHONY: cleanOBJ cleanBIN cleanAll video cleanPictures Release Debug docker-test-linux-arm64
+.PHONY: cleanOBJ cleanBIN cleanAll video cleanPictures Release Debug test-render docker-test-linux-arm64
