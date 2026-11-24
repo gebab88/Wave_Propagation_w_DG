@@ -212,6 +212,8 @@ test_ctrl_c_restores_terminal() {
 # itself instead of rejecting the key. The key goes out once the prompt is shown,
 # so it cannot reach the console before _getch() runs. No trap in sh: a
 # CTRL_C_EVENT would end sh as well, and the missing status line would show it.
+# The MSYS2 runtime maps the exit code STATUS_CONTROL_C_EXIT to SIGINT, so sh
+# sees 130, as on POSIX.
 test_ctrl_c_ends_windows_menu() {
     local out status
     out="$(run_tty @wait:'Press 1-5' $'\003' -- sh -c "'$BIN' '$CFG'; echo status=\$?")"
@@ -223,7 +225,7 @@ test_ctrl_c_ends_windows_menu() {
     fi
     status="$(grep -o 'status=[0-9]*' <<<"$out" | head -n 1)"
     [[ -n "$status" ]] || { fail "${FUNCNAME[0]}" "no status line"; show_output "$out"; return; }
-    [[ "$status" != status=0 ]] || { fail "${FUNCNAME[0]}" "exit status 0 after Ctrl+C"; return; }
+    [[ "$status" == status=130 ]] || { fail "${FUNCNAME[0]}" "$status after Ctrl+C, expected status=130"; return; }
     pass "${FUNCNAME[0]}"
 }
 

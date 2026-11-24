@@ -209,8 +209,14 @@ static bool menuCanReadKeys() {
 static const int kExtendedKey = 256;
 
 // Read one key without waiting for Enter or echoing it.
+// While _getch() waits, the console input mode is 0, so Ctrl+C arrives as the
+// key 3 and the console raises no CTRL_C_EVENT. The program then ends as the
+// default Ctrl+C handler would end it. _getch() has restored the console mode
+// before it returns, so nothing is left to reset.
 static int readKeyRaw() {
     const int key = _getch();
+    if (key == 3)
+        ExitProcess(STATUS_CONTROL_C_EXIT);
     if (key == 0 || key == 0xE0) {
         _getch();
         return kExtendedKey;
