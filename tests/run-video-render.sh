@@ -15,6 +15,8 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 cd "$work_dir"
 
+is_windows=0; case "$(uname -s)" in MINGW*|UCRT64*|CLANG64*|CLANGARM64*|MSYS*) is_windows=1 ;; esac
+
 failures=0
 pass() { echo "PASS $1"; }
 fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
@@ -22,7 +24,7 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 test_frame_count_matches() {
     local name="${FUNCNAME[0]}" d="$work_dir/count"
     mkdir -p "$d"; cd "$d"
-    local out; out="$(timeout 60 "$BIN" "$SMOKE_CFG" </dev/null 2>&1)" || {
+    local out; out="$(timeout 60 "$BIN" "$SMOKE_CFG" </dev/null 2>&1 | tr -d '\r')" || {
         fail "$name" "solver exited non-zero"; cd "$work_dir"; return; }
     local n; n="$(sed -n 's/^Rendering \([0-9][0-9]*\) frames at 60 fps$/\1/p' <<<"$out" | head -n1)"
     if [[ -z "$n" ]]; then fail "$name" "no 'Rendering <n> frames at 60 fps' line"; cd "$work_dir"; return; fi
@@ -39,7 +41,12 @@ test_frame_count_matches() {
 test_ffmpeg_failure_reported() {
     local name="${FUNCNAME[0]}" d="$work_dir/fail" fake="$work_dir/fakebin"
     mkdir -p "$d" "$fake"
-    printf '#!/bin/sh\nexit 1\n' > "$fake/ffmpeg"; chmod +x "$fake/ffmpeg"
+    if [[ "$is_windows" == 1 ]]; then
+        # cmd.exe (used by _popen) finds ffmpeg.cmd through PATHEXT, not a shell script.
+        printf '@exit /b 1\r\n' > "$fake/ffmpeg.cmd"
+    else
+        printf '#!/bin/sh\nexit 1\n' > "$fake/ffmpeg"; chmod +x "$fake/ffmpeg"
+    fi
     cd "$d"
     local out rc=0
     out="$(PATH="$fake:$PATH" timeout 60 "$BIN" "$SMOKE_CFG" </dev/null 2>&1)" || rc=$?
@@ -52,6 +59,9 @@ test_ffmpeg_failure_reported() {
 
 test_memory_bounded() {
     local name="${FUNCNAME[0]}" d="$work_dir/mem"
+    if [[ "$is_windows" == 1 ]]; then
+        echo "SKIP $name (time(1) cannot measure native Windows processes)"; return
+    fi
     # Peak memory from time(1): BSD time -l reports bytes, GNU time -v kilobytes.
     local time_opt
     case "$(uname -s)" in
