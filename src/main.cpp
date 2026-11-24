@@ -245,7 +245,10 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
             chosen = kTimeIntegrators[key - '1'].name;
             break;
         }
-        if (key == '\n' || key == '\r' || key == 0x04 || key == -1) {
+        // Enter, Ctrl+D (0x04), EOF, or Ctrl+Z (0x1A), which ends input on a
+        // Windows console. On POSIX, ISIG stays on, so Ctrl+Z suspends the job
+        // and 0x1A never arrives.
+        if (key == '\n' || key == '\r' || key == 0x04 || key == 0x1A || key == -1) {
             chosen = configDefault;
             break;
         }
