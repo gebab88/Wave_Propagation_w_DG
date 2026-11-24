@@ -23,6 +23,9 @@ mit Kompressionsmodul `K = Z₀·c₀ = ρ₀·c₀²` und Impedanz `Z₀ = ρ�
 - **Rechter Rand:** starre Wand (Reflexion, Druckverdopplung → Amplitude ±2 im eingeschwungenen Zustand).
 - **Zeitintegration:** standardmäßig klassisches Runge-Kutta 4. Ordnung (RK4); weitere Verfahren sind verfügbar (siehe Konfiguration), darunter der deutlich langsamere Prädiktor-Korrektor nach Heun (implizite Trapezregel via Fixpunktiteration).
 
+Ausführliche technische Dokumentation mit Herleitung, Stabilitätsgrenzen und gemessenen Konvergenzordnungen:
+[DG-Raumdiskretisierung](docs/discontinuous-galerkin.md) · [Zeitintegration](docs/zeitintegration.md)
+
 ---
 
 ## Projektstruktur
@@ -119,7 +122,7 @@ Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wir
 
 | Parameter | Default | Bedeutung |
 |---|---|---|
-| `order` | `5` | Knotenordnung pro Zelle (funktional: 2, 5 und allgemein ≥ 3, z. B. 8) |
+| `order` | `5` | Knoten pro Zelle, beliebig ≥ 1 (1 = stückweise konstant, d. h. Finite-Volumen erster Ordnung; 8 verifiziert) |
 | `TimeIntegration` | `RungeKuttaClassic` | Zeitintegrationsverfahren |
 | `N` | `50` | Anzahl Zellen |
 | `x0, x1` | `0.0, 0.5` | Gebiet [m] |
@@ -141,7 +144,7 @@ Der **Zeitschritt** ist ordnungsabhängig (DG-CFL):
 deltaT = CFLReserve · dx / (|c₀| · (2·order − 1))
 ```
 
-Dadurch ist `CFLReserve` für alle Ordnungen gleich „sicher". Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Frames.
+Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die RK4-Grenze sinkt von ≈ 1,65 bei Ordnung 2 auf ≈ 0,76 bei Ordnung 8, siehe [Zeitintegration](docs/zeitintegration.md#4-stabilität)). Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Frames.
 
 Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, `RungeKuttaSecond`, `RungeKuttaSecondOrder`, `PredictorCorrectorHeun`.
 
@@ -159,7 +162,7 @@ Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, 
 ## Hinweise / Bekanntes
 
 - Der Projektname enthält den Tippfehler „Discontinous" (statt „Discontinuous"); das Binary heißt entsprechend `DiscontinousGalerkin`.
-- Ordnung 2, 5 und beliebige Ordnung ≥ 3 (Gauß-Legendre-Knoten/-Gewichte werden via Golub-Welsch berechnet) funktionieren; Ordnung 8 ist verifiziert. Ordnung 1 ist im Setup unvollständig.
+- Alle Ordnungen ≥ 1 funktionieren: 1, 2 und 5 sind fest kodiert, alle anderen berechnen Gauß-Legendre-Knoten/-Gewichte via Golub-Welsch; Ordnung 8 ist verifiziert. Ordnung 1 ist das Upwind-Finite-Volumen-Verfahren und verschmiert die Wellenfront deutlich (siehe [DG-Dokumentation](docs/discontinuous-galerkin.md#102-ordnung-1-verschmierte-wellenfront)).
 - HDF5 ist installiert, wird aber **nicht** gelinkt (alle HDF5-Aufrufe im Code sind auskommentiert).
 - Frames im Frame-Index, der ein Vielfaches der Anregungsperiode ist, treffen den zeitlichen Nulldurchgang der stehenden Welle und wirken daher flach — das ist korrektes Verhalten, kein Fehler.
 
