@@ -13,8 +13,10 @@
 
 #include <csignal>
 #include <cerrno>
+#ifndef _WIN32
 #include <termios.h>
 #include <unistd.h>
+#endif
 
 #include <omp.h>
 #include <yaml-cpp/yaml.h>
@@ -23,6 +25,15 @@
 #include "ClassdXdt.hpp"
 #include "vandermonde.hpp"
 #include "ClassPlot.hpp"
+
+#ifdef _WIN32
+// After all other headers: the min/max macros would break std::max and Armadillo.
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <conio.h>
+#include <io.h>
+#endif
 
 using namespace arma;
 using namespace std;
@@ -117,6 +128,9 @@ static bool isKnownTimeIntegrator(const std::string &name) {
     return false;
 }
 
+#ifndef _WIN32
+// ---- Terminal access, POSIX ----
+
 // Terminal state to restore if SIGINT arrives while the terminal is in raw mode.
 static struct termios g_savedTermios;
 
@@ -167,11 +181,36 @@ static int readKeyRaw() {
     return n == 1 ? static_cast<int>(c) : -1;
 }
 
+// True if stdin is a terminal in the foreground (reading it as a background job
+// would stop us with SIGTTIN/SIGTTOU).
+static bool menuCanReadKeys() {
+    return isatty(STDIN_FILENO) && tcgetpgrp(STDIN_FILENO) == getpgrp();
+}
+
+// Drop pending input, e.g. the rest of an escape sequence or type-ahead.
+static void discardPendingInput() {
+    if (isatty(STDIN_FILENO)) tcflush(STDIN_FILENO, TCIFLUSH);
+}
+#else
+// ---- Terminal access, Windows ----
+
+static bool menuCanReadKeys() {
+    return _isatty(_fileno(stdin)) != 0;
+}
+
+static int readKeyRaw() {
+    return _getch();
+}
+
+static void discardPendingInput() {
+}
+#endif
+
 // Ask for the time integrator with one keypress. Without a terminal on stdin
 // (</dev/null, pipes) or when running as a background job (reading the
 // terminal would stop us with SIGTTIN/SIGTTOU) the config value is used silently.
 static std::string selectTimeIntegration(const std::string &configDefault) {
-    if (!isatty(STDIN_FILENO) || tcgetpgrp(STDIN_FILENO) != getpgrp()) {
+    if (!menuCanReadKeys()) {
         cout << "Using: " << configDefault << endl;
         return configDefault;
     }
@@ -205,7 +244,7 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
             chosen = configDefault;
             break;
         }
-        tcflush(STDIN_FILENO, TCIFLUSH);  // drop the rest of an escape sequence
+        discardPendingInput();  // drop the rest of an escape sequence
         cerr << endl << "Invalid key, press " << keyRange << " or Enter." << endl;
     }
     cerr << endl;
@@ -648,7 +687,7 @@ int main( int argc, char *argv[] ){
     cout << "Press enter to exit." << endl;
     // Drop input typed ahead (e.g. a habitual Enter after the menu key) so it
     // does not answer this prompt.
-    if (isatty(STDIN_FILENO)) tcflush(STDIN_FILENO, TCIFLUSH);
+    discardPendingInput();
 	cin.get();
 
     return 0;

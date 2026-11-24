@@ -106,7 +106,20 @@ expect_completes() {
     pass "$name"
 }
 
+# A config saved with Windows line endings must load like any other.
+test_crlf_config_accepted() {
+    local cfg="$work_dir/crlf.yaml"
+    write_cfg "$cfg"
+    awk '{ printf "%s\r\n", $0 }' "$cfg" >"$cfg.crlf"
+    mv "$cfg.crlf" "$cfg"
+    run_solver "$cfg" 30
+    [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
+    [[ "$out" == *'The calculations are finished!'* ]] || { fail "${FUNCNAME[0]}" "run did not finish"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
 test_valid_config_accepted
+test_crlf_config_accepted
 
 # A non-positive time step (and an endless time loop) without these checks:
 expect_rejected test_swapped_domain_rejected        x1 x0=0.5 x1=0.0
