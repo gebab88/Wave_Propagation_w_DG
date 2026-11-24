@@ -52,7 +52,7 @@ jobs:
       matrix:
         include:
           - { runner: windows-2025,   arch: x64,   msystem: UCRT64,     prefix: ucrt64,     compiler: "gcc:p" }
-          - { runner: windows-11-arm, arch: arm64, msystem: CLANGARM64, prefix: clangarm64, compiler: "clang:p openmp:p" }
+          - { runner: windows-11-arm, arch: arm64, msystem: CLANGARM64, prefix: clangarm64, compiler: "clang:p llvm-openmp:p" }
     defaults:
       run:
         shell: msys2 {0}

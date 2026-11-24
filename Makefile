@@ -5,6 +5,9 @@ UNAME_S := $(shell uname -s)
 ifeq ($(origin CXX), default)
   ifeq ($(UNAME_S),Darwin)
     CXX = clang++
+  else ifneq ($(filter CLANG%,$(MSYSTEM)),)
+    # MSYS2 CLANG64/CLANGARM64 ship clang only (no g++).
+    CXX = clang++
   else
     CXX = g++
   endif
@@ -45,6 +48,17 @@ else ifeq ($(UNAME_S),Linux)
   # and in CI those are OpenBLAS + LAPACK, and g++ supplies OpenMP via -fopenmp.
   CFLAGS  = $(BASE_CFLAGS) -fopenmp
   LDFLAGS = -pthread -fopenmp -lopenblas -llapack -lyaml-cpp
+else ifneq ($(filter MINGW% UCRT64% CLANG64% CLANGARM64% MSYS%,$(UNAME_S)),)
+  # Native Windows via MSYS2: build in the UCRT64 shell (x64, GCC) or the
+  # CLANGARM64 shell (ARM64, clang). `uname -s` there reports MINGW64_NT-*,
+  # CLANGARM64 included, so MSYSTEM tells the environments apart.
+  ifeq ($(filter UCRT64 MINGW64 CLANG64 CLANGARM64,$(MSYSTEM)),)
+    $(error Build in an MSYS2 UCRT64 or CLANGARM64 shell, not '$(MSYSTEM)')
+  endif
+  # -D_USE_MATH_DEFINES: M_PI and friends on the UCRT headers.
+  CFLAGS  = $(BASE_CFLAGS) -fopenmp -D_USE_MATH_DEFINES
+  LDFLAGS = -pthread -fopenmp -lopenblas -lyaml-cpp
+  EXE     = .exe
 else
   $(error Unsupported OS "$(UNAME_S)"; set CFLAGS and LDFLAGS explicitly)
 endif
@@ -59,9 +73,9 @@ UNAME:=$(shell uname -a)
 # Explicit object lists; the pattern rules below build each object.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
 OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o
-BIN= bin/Release/DiscontinousGalerkin
+BIN= bin/Release/DiscontinousGalerkin$(EXE)
 DEBUG_OBJS= $(OBJS:obj/Release/%=obj/Debug/%)
-DEBUG_BIN= bin/Debug/DiscontinousGalerkin
+DEBUG_BIN= bin/Debug/DiscontinousGalerkin$(EXE)
 
 # Rebuild objects when any header changes (the rules below don't track #includes
 # otherwise, so e.g. editing include/ClassdXdt.hpp would silently not recompile).
