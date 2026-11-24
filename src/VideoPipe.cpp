@@ -30,7 +30,9 @@ std::string shellQuote(const std::string &arg)
 FILE *openWritePipe(const std::string &command)
 {
 #ifdef _WIN32
-    return _popen(("\"" + command + "\"").c_str(), "w");
+    // "wb": the default text mode turns every 0x0A of the raw frames into
+    // 0x0D 0x0A and corrupts the video.
+    return _popen(("\"" + command + "\"").c_str(), "wb");
 #else
     return popen(command.c_str(), "w");
 #endif
