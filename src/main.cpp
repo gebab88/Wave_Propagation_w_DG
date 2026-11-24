@@ -97,7 +97,7 @@ static int readKeyRaw() {
     struct sigaction oldAct;
     bool handlerInstalled = false;
     if (sigaction(SIGINT, nullptr, &oldAct) == 0 && oldAct.sa_handler != SIG_IGN) {
-        struct sigaction act;
+        struct sigaction act{};
         act.sa_handler = restoreTerminalOnSigint;
         sigemptyset(&act.sa_mask);
         act.sa_flags = 0;
@@ -110,7 +110,7 @@ static int readKeyRaw() {
     raw.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 
-    cout.flush();
+    cerr.flush();
     unsigned char c = 0;
     ssize_t n;
     do {
@@ -132,19 +132,21 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
         return configDefault;
     }
 
-    cout << "Select time integration method:" << endl;
+    // Menu goes to stderr so it stays visible when stdout is redirected to a file.
+    const std::string keyRange = "1-" + std::to_string(kTimeIntegrators.size());
+    cerr << "Select time integration method:" << endl;
     for (size_t i = 0; i < kTimeIntegrators.size(); ++i) {
-        cout << "  " << (i + 1) << ") " << kTimeIntegrators[i];
+        cerr << "  " << (i + 1) << ") " << kTimeIntegrators[i];
         if (configDefault == kTimeIntegrators[i])
-            cout << "   (config.yaml)";
-        cout << endl;
+            cerr << "   (config.yaml)";
+        cerr << endl;
     }
 
     std::string chosen;
     while (true) {
-        cout << "Press 1-5, Enter = config.yaml value: " << flush;
+        cerr << "Press " << keyRange << ", Enter = config.yaml value: " << flush;
         const int key = readKeyRaw();
-        if (key >= '1' && key <= '5') {
+        if (key >= '1' && key < '1' + static_cast<int>(kTimeIntegrators.size())) {
             chosen = kTimeIntegrators[key - '1'];
             break;
         }
@@ -153,16 +155,16 @@ static std::string selectTimeIntegration(const std::string &configDefault) {
             break;
         }
         tcflush(STDIN_FILENO, TCIFLUSH);  // drop the rest of an escape sequence
-        cout << endl << "Invalid key, press 1-5 or Enter." << endl;
+        cerr << endl << "Invalid key, press " << keyRange << " or Enter." << endl;
     }
-    cout << endl << "Using: " << chosen << endl;
+    cerr << endl;
+    cout << "Using: " << chosen << endl;
     return chosen;
 }
 
 
 int main( int argc, char *argv[] ){
     chrono::time_point<chrono::system_clock> StartTime, EndTimeCalc,EndTimePlot;
-    StartTime = chrono::system_clock::now();
 
     // ---- Runtime configuration (replaces the former compile-time include/config.hpp) ----
     // Independent parameters are read from a YAML file (argv[1], else "config.yaml"
@@ -200,6 +202,7 @@ int main( int argc, char *argv[] ){
         return 1;
     }
     const std::string TimeIntegration = selectTimeIntegration(configTimeIntegration);
+    StartTime = chrono::system_clock::now();   // exclude the time spent in the menu
 
     const float  CFLReserve = cfgGet<float>(cfg, "CFLReserve");
 
@@ -585,6 +588,9 @@ int main( int argc, char *argv[] ){
     cout << "elapsed time: " << elapsed_time / 1000.0 /1000.0 << "s\n";
 
     cout << "Press enter to exit." << endl;
+    // Drop input typed ahead (e.g. a habitual Enter after the menu key) so it
+    // does not answer this prompt.
+    if (isatty(STDIN_FILENO)) tcflush(STDIN_FILENO, TCIFLUSH);
 	cin.get();
 
     return 0;

@@ -21,18 +21,21 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 # run_tty <key1> [<key2> ...] -- <cmd...>
 # Runs cmd in a pseudo-terminal; each key is sent separately, 0.5 s after the
 # previous event (raw mode must be active first), then 1 s of grace.
+# Env: TTY_KEY_DELAY (default 0.5) pause before each key, TTY_TAIL (default 1)
+# seconds the input stays open after the last key, TTY_TIMEOUT (default 20).
 run_tty() {
     local keys=()
     while [[ $# -gt 0 && "$1" != "--" ]]; do keys+=("$1"); shift; done
     shift  # drop "--"
     local limit="${TTY_TIMEOUT:-20}"
+    local delay="${TTY_KEY_DELAY:-0.5}" tail_s="${TTY_TAIL:-1}"
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        ( for k in ${keys[@]+"${keys[@]}"}; do sleep 0.5; printf '%s' "$k"; done; sleep 1 ) \
+        ( for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done; sleep "$tail_s" ) \
             | timeout "$limit" script -q /dev/null "$@" 2>&1 | tr -d '\r' || true
     else
         local cmd
         printf -v cmd '%q ' "$@"
-        ( for k in ${keys[@]+"${keys[@]}"}; do sleep 0.5; printf '%s' "$k"; done; sleep 1 ) \
+        ( for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done; sleep "$tail_s" ) \
             | timeout "$limit" script -qec "$cmd" /dev/null 2>&1 | tr -d '\r' || true
     fi
 }
@@ -126,6 +129,38 @@ test_background_job_skips_menu() {
     pass "${FUNCNAME[0]}"
 }
 
+test_menu_time_not_in_elapsed() {
+    local out t; out="$(TTY_KEY_DELAY=2 run_tty 2 -- "$BIN" "$CFG")"
+    t="$(grep -m1 'elapsed time:' <<<"$out" | sed 's/.*elapsed time: \([0-9.e+-]*\)s.*/\1/')"
+    [[ -n "$t" ]] || { fail "${FUNCNAME[0]}" "no elapsed time line"; return; }
+    awk -v t="$t" 'BEGIN{exit !(t < 1)}' || { fail "${FUNCNAME[0]}" "elapsed time $t s includes menu wait"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
+test_enter_after_key_does_not_skip_exit_prompt() {
+    local plot_cfg="$repo_root/tests/menu-plot-test-config.yaml" out d secs
+    d="$(mktemp -d)"
+    # '2' at 0.3 s, a habitual Enter at 0.6 s, input (and thus the ^D that script
+    # forwards on close) stays open until ~8.6 s. If the queued Enter is consumed by
+    # the final cin.get(), the program exits after plotting (a few seconds at most).
+    out="$(cd "$d" && TTY_KEY_DELAY=0.3 TTY_TAIL=8 TTY_TIMEOUT=30 run_tty 2 $'\r' -- \
+        bash -c "SECONDS=0; '$BIN' '$plot_cfg'; echo exit_after=\$SECONDS")"
+    rm -rf "$d"
+    expect_contains "${FUNCNAME[0]}" "$out" 'Press enter to exit.' || return
+    secs="$(grep -m1 -o 'exit_after=[0-9]*' <<<"$out" | cut -d= -f2)"
+    [[ -n "$secs" ]] || { fail "${FUNCNAME[0]}" "no exit_after line"; return; }
+    [[ "$secs" -ge 7 ]] || { fail "${FUNCNAME[0]}" "exited after ${secs}s: queued Enter skipped the exit prompt"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
+test_menu_visible_when_stdout_redirected() {
+    local log="$work_dir/redirect.log" out; rm -f "$log"
+    out="$(run_tty 2 -- sh -c "'$BIN' '$CFG' > '$log'")"
+    expect_contains "${FUNCNAME[0]}" "$out" 'Select time integration method:' || return
+    grep -q 'Using: RungeKuttaClassic' "$log" 2>/dev/null || { fail "${FUNCNAME[0]}" "log lacks 'Using: RungeKuttaClassic'"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
 test_key_selects_method || true
 test_enter_uses_config || true
 test_invalid_key_reprompts || true
@@ -137,6 +172,9 @@ test_prompt_flushed_when_stdout_piped || true
 test_ctrl_c_restores_terminal || true
 test_ignored_sigint_stays_ignored || true
 test_background_job_skips_menu || true
+test_menu_time_not_in_elapsed || true
+test_enter_after_key_does_not_skip_exit_prompt || true
+test_menu_visible_when_stdout_redirected || true
 
 if [[ $failures -ne 0 ]]; then
     echo "$failures test(s) failed" >&2
