@@ -341,7 +341,10 @@ int main( int argc, char *argv[] ){
                 U0.col(i)=ui;
             }
             Q=zeros<mat>(2,2);
-            invMdiag=ones<vec>(2*order*N);
+            // One constant basis function per cell: its mass is the integral of 1
+            // over [-1,1] = 2 (the one-point Gauss-Legendre weight). Using 1 here
+            // doubled the right-hand side and made the wave travel at 2*c_0.
+            invMdiag=0.5*ones<vec>(2*order*N);
         //U0.print("U0= ");
         }break;
 

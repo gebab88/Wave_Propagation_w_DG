@@ -30,7 +30,7 @@ OpenMPLargeThreads: 4
 CFLReserve: 0.45
 
 N: 50          # number of cells
-order: 5       # nodal order per cell (functional: 2, 5, and general order >= 3)
+order: 5       # nodes per cell, any order >= 1 (1 = piecewise constant / finite volume)
 
 # Time interval [s]
 t0: 0.0
