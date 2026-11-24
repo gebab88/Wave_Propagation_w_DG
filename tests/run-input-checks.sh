@@ -118,8 +118,28 @@ test_crlf_config_accepted() {
     pass "${FUNCNAME[0]}"
 }
 
+# Without an argument and without config.yaml in the CWD, the solver reads the
+# config.yaml two levels above its own directory, so the README's
+# `cd run && ../bin/Release/DiscontinousGalerkin` works. A copy of the binary
+# in a temporary tree keeps the repository's own config.yaml out of it. On
+# Windows, argv[0] contains backslashes.
+test_config_found_next_to_binary() {
+    local tree="$work_dir/tree" exe="$BIN"
+    [[ -f "$BIN.exe" ]] && exe="$BIN.exe"
+    mkdir -p "$tree/bin/Release" "$tree/run"
+    cp "$exe" "$tree/bin/Release/"
+    write_cfg "$tree/config.yaml" TimeIntegration=RungeKuttaSecondOrder
+    rc=0
+    out="$(cd "$tree/run" && timeout 30 ../bin/Release/DiscontinousGalerkin </dev/null 2>"$tree/stderr.txt")" || rc=$?
+    err="$(cat "$tree/stderr.txt")"
+    [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
+    [[ "$out" == *'Using: RungeKuttaSecondOrder'* ]] || { fail "${FUNCNAME[0]}" "the config next to the binary was not used: $out"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
 test_valid_config_accepted
 test_crlf_config_accepted
+test_config_found_next_to_binary
 
 # A non-positive time step (and an endless time loop) without these checks:
 expect_rejected test_swapped_domain_rejected        x1 x0=0.5 x1=0.0

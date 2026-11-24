@@ -68,6 +68,7 @@ jobs:
       - name: Show environment
         run: uname -s; uname -m; echo "MSYSTEM=$MSYSTEM"; (g++ --version || clang++ --version) | head -1
       - name: Release and Debug build
+        id: build
         run: make Release Debug
       - name: Run all tests
         run: make test
@@ -82,6 +83,8 @@ jobs:
           CONPTY_RUN_RAW: ${{ runner.temp }}/conpty-raw.log
       - name: Start the solver from PowerShell
         # Outside MSYS2: the program must find ffmpeg and its DLLs through PATH alone.
+        # Needs only the build, so it runs even if a test failed.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: pwsh
         timeout-minutes: 5
         run: |
@@ -95,3 +98,24 @@ jobs:
           $size = (Get-Item output.mp4 -ErrorAction SilentlyContinue).Length
           Write-Host "output.mp4 size: $size bytes"
           if (-not $size) { Write-Host "output.mp4 is missing or empty"; exit 1 }
+      - name: Start the solver from PowerShell without an argument
+        # The README's run/ workflow: started from a subdirectory without an
+        # argument, the program reads config.yaml two levels above bin\Release.
+        # argv[0] uses backslashes here. The config, written for this step only,
+        # turns plotting off, so "Plotting disabled by config." shows that it
+        # was read.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $env:PATH = "${{ steps.msys2.outputs.msys2-location }}\${{ matrix.prefix }}\bin;$env:PATH"
+          (Get-Content tests\linux-smoke-config.yaml) -replace '^EnablePlotting:.*', 'EnablePlotting: false' | Set-Content config.yaml
+          New-Item -ItemType Directory -Force run | Out-Null
+          Set-Location run
+          $out = $null | ..\bin\Release\DiscontinousGalerkin.exe 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          Write-Host "exit code: $code"
+          if ($code -ne 0) { Write-Host "Solver exited with code $code"; exit 1 }
+          if ($out -notmatch 'Using: RungeKuttaClassic') { Write-Host "Missing 'Using: RungeKuttaClassic' line"; exit 1 }
+          if ($out -notmatch 'Plotting disabled by config\.') { Write-Host "Missing 'Plotting disabled by config.' line: config.yaml was not read"; exit 1 }

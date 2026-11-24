@@ -74,11 +74,15 @@ run_tty() {
     ) | timeout "$limit" "${script_cmd[@]}" 2>&1 | tee "$TTY_LOG" | tr -d '\r' || true
 }
 
+show_output() {  # output
+    echo "  first 40 lines of the output:"
+    head -n 40 <<<"$1" | sed 's/^/  | /'
+}
+
 expect_contains() {  # name output needle
     if [[ "$2" == *"$3"* ]]; then return 0; fi
     fail "$1" "missing '$3'"
-    echo "  first 40 lines of the output:"
-    head -n 40 <<<"$2" | sed 's/^/  | /'
+    show_output "$2"
     return 1
 }
 
@@ -203,6 +207,26 @@ test_ctrl_c_restores_terminal() {
     pass "${FUNCNAME[0]}"
 }
 
+# While _getch() waits, the console input mode is 0, so Ctrl+C arrives as the
+# key 3 and the console raises no CTRL_C_EVENT. The menu must end the program
+# itself instead of rejecting the key. The key goes out once the prompt is shown,
+# so it cannot reach the console before _getch() runs. No trap in sh: a
+# CTRL_C_EVENT would end sh as well, and the missing status line would show it.
+test_ctrl_c_ends_windows_menu() {
+    local out status
+    out="$(run_tty @wait:'Press 1-5' $'\003' -- sh -c "'$BIN' '$CFG'; echo status=\$?")"
+    if [[ "$out" == *'Invalid key'* ]]; then
+        fail "${FUNCNAME[0]}" "Ctrl+C was rejected as an invalid key"; show_output "$out"; return
+    fi
+    if [[ "$out" == *'Using:'* ]]; then
+        fail "${FUNCNAME[0]}" "the program went on after Ctrl+C"; show_output "$out"; return
+    fi
+    status="$(grep -o 'status=[0-9]*' <<<"$out" | head -n 1)"
+    [[ -n "$status" ]] || { fail "${FUNCNAME[0]}" "no status line"; show_output "$out"; return; }
+    [[ "$status" != status=0 ]] || { fail "${FUNCNAME[0]}" "exit status 0 after Ctrl+C"; return; }
+    pass "${FUNCNAME[0]}"
+}
+
 test_ignored_sigint_stays_ignored() {
     local out; out="$(run_tty $'\003' 2 -- sh -c "trap '' INT; '$BIN' '$CFG'; echo status=\$?")"
     expect_contains "${FUNCNAME[0]}" "$out" 'Using: RungeKuttaClassic' &&
@@ -313,6 +337,7 @@ test_invalid_config_fails_early || true
 pty_test test_config_error_before_menu
 pty_test test_prompt_flushed_when_stdout_piped
 posix_only test_ctrl_c_restores_terminal "termios: nothing to restore on Windows"
+windows_only test_ctrl_c_ends_windows_menu "POSIX: see test_ctrl_c_restores_terminal"
 posix_only test_ignored_sigint_stays_ignored "POSIX signal disposition"
 posix_only test_background_job_skips_menu "no job control on Windows"
 pty_test test_menu_time_not_in_elapsed
