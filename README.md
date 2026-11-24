@@ -97,9 +97,9 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
 
-Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl.
+Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl. `test_ctrl_z_uses_config` wird unter macOS und Linux immer übersprungen, weil Strg+Z dort den Job anhält. Unter Windows laufen die Menü-Tests über `tests/conpty_run.cpp` (ConPTY) statt über `script`; dort entfallen `test_memory_bounded`, `test_ctrl_c_restores_terminal`, `test_ignored_sigint_stays_ignored` und `test_background_job_skips_menu`, weil sie POSIX-Verhalten oder `time(1)` voraussetzen.
 
-GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` unter Ubuntu 24.04 aus, auf x86_64 und auf arm64.
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` aus: unter Ubuntu 24.04 auf x86_64 und auf arm64 sowie unter Windows 11 mit MSYS2 auf x64 (`windows-2025`, UCRT64) und auf ARM64 (`windows-11-arm`, CLANGARM64). Die Windows-Jobs starten das fertige Programm außerdem aus PowerShell, also außerhalb von MSYS2.
 
 ### Linux via Docker testen (arm64 und x64)
 
@@ -142,10 +142,40 @@ etwa 40 Sekunden bzw. 4 bis 5 Minuten. Unter QEMU stürzt g++ vereinzelt mit
 „Segmentation fault“ ab. Das liegt am Emulator, ein erneuter Aufruf baut durch.
 
 Mit Ubuntu 26.04 überspringt `make test` im per QEMU emulierten x64-Image die
-14 Menü-Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
+XX Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
 ioctl `TCGETS2` ab, und das kennt QEMU 7.0 nicht. Dort sieht also kein Programm
 ein Terminal. Nativ unter arm64 laufen mit 26.04 alle Tests.
 Die CI testet beide Architekturen nativ ([Tests](#tests)).
+
+---
+
+## Windows (MSYS2)
+
+Das Projekt baut unter Windows 11 mit [MSYS2](https://www.msys2.org/), auf x64 und auf ARM64. Es nutzt dasselbe `Makefile` wie unter macOS und Linux. Auf x64 kommt GCC aus der Umgebung UCRT64, auf ARM64 clang aus CLANGARM64.
+
+Nach der Installation von MSYS2 die passende Shell öffnen (Startmenü: „MSYS2 UCRT64“ bzw. „MSYS2 CLANGARM64“) und die Pakete installieren:
+
+```sh
+# x64, Shell "MSYS2 UCRT64"
+pacman -S --needed make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-armadillo mingw-w64-ucrt-x86_64-openblas mingw-w64-ucrt-x86_64-yaml-cpp mingw-w64-ucrt-x86_64-ffmpeg
+
+# ARM64, Shell "MSYS2 CLANGARM64"
+pacman -S --needed make mingw-w64-clang-aarch64-clang mingw-w64-clang-aarch64-llvm-openmp mingw-w64-clang-aarch64-armadillo mingw-w64-clang-aarch64-openblas mingw-w64-clang-aarch64-yaml-cpp mingw-w64-clang-aarch64-ffmpeg
+```
+
+Das `Makefile` erkennt MSYS2 an `uname -s` und wählt den Compiler über `MSYSTEM`: `clang++` in den `CLANG*`-Umgebungen, sonst `g++`. Die OpenBLAS aus MSYS2 enthält LAPACK, ein eigenes Paket dafür braucht es nicht. Danach wie gewohnt, ebenfalls in der MSYS2-Shell:
+
+```sh
+make Release                    # -> bin/Release/DiscontinousGalerkin.exe
+make test                       # alle Tests
+bin/Release/DiscontinousGalerkin.exe
+```
+
+- **Starten außerhalb von MSYS2** (Windows Terminal, PowerShell, cmd): Das `bin`-Verzeichnis der Umgebung muss im `PATH` stehen, zum Beispiel `C:\msys64\ucrt64\bin` bzw. `C:\msys64\clangarm64\bin`. Dort liegen die DLLs. Die CI startet das Programm so aus PowerShell.
+- **ffmpeg** muss im `PATH` liegen. Es kann aus MSYS2 stammen (siehe oben) oder aus einer anderen Quelle. Das Programm startet es über `cmd.exe`. Fehlt es, erscheint `Video encoding failed …`, und die Rechnung läuft trotzdem durch.
+- **Integrator-Menü:** Es erscheint, wenn stdin eine Windows-Konsole ist, also in Windows Terminal, PowerShell und cmd. Taste `1`–`5` wählt ein Verfahren, Enter oder Strg+Z übernimmt den Wert aus der Config. Kommt die Eingabe aus einer Pipe oder von `NUL`, wird das Menü übersprungen und der Config-Wert gilt, angezeigt durch die Zeile `Using: …`.
+- **mintty** (das Standardfenster der MSYS2-Shells): Ob das Menü dort erscheint, ist nicht geprüft, denn die CI hat keine mintty-Sitzung. Erscheint es nicht, gilt der Config-Wert; das Menü bekommt man dann sicher in Windows Terminal, PowerShell oder cmd.
+- **Tests:** `make test` läuft wie unter Linux. Die Menü-Tests nutzen ConPTY, der Speichertest entfällt (siehe [Tests](#tests)).
 
 ---
 

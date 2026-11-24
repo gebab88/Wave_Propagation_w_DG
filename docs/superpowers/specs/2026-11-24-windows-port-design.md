@@ -100,8 +100,8 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
   und es greift der bestehende Pfad „could not write all frames to ffmpeg“.
 - **Exit-Status:** `_pclose` liefert direkt den Exit-Code, die
   `WIFEXITED`-Makros entfallen. Die Meldung lautet wie bisher „ffmpeg returned N.
-  Is ffmpeg on the PATH?“. Fehlt ffmpeg, endet `cmd.exe` mit Code 1, was zur
-  selben Meldung führt.
+  Is ffmpeg on the PATH?“. Fehlt ffmpeg, endet `cmd.exe` mit Code 9009 (nicht 1),
+  was zur selben Meldung führt.
 
 ### Bauen und Starten
 
@@ -125,14 +125,18 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
     auf. Tastenlogik und Meldungen bleiben gemeinsam.
   - Der POSIX-Code wird nur verschoben, nicht verändert. Das gilt auch für den
     SIGINT-Handler und die Hintergrundjob-Prüfung.
-- **`src/ClassPlot.cpp`:** Je Plattform eigene Varianten für `popen`/`pclose`,
-  das Quoting, SIGPIPE und die Auswertung des Status.
+- **`src/VideoPipe.cpp`:** Je Plattform eigene Varianten für `popen`/`pclose`,
+  das Quoting, SIGPIPE und die Auswertung des Status. Die ffmpeg-Pipe liegt dort
+  und nicht in `ClassPlot.cpp`.
 - **`Makefile`:** ein dritter Zweig für MSYS2, wenn `uname -s` mit `MINGW`,
-  `UCRT64`, `CLANG64` oder `CLANGARM64` beginnt.
+  `UCRT64`, `CLANG64` oder `CLANGARM64` beginnt. In der CI liefert `uname -s` auf
+  beiden Runnern `MINGW64_NT-<Version>` (ARM64 z. B. `MINGW64_NT-10.0-26200-ARM64`),
+  und `uname -m` meldet auch auf ARM64 `x86_64`.
   - Compiler: g++ in den GCC-Umgebungen, clang++ in den clang-Umgebungen, sofern
-    `CXX` nicht gesetzt ist.
-  - Flags und Bibliotheken: `-fopenmp`, `-lopenblas -lyaml-cpp`. Zu LAPACK siehe
-    unten.
+    `CXX` nicht gesetzt ist. Weil `uname` die Umgebung nicht unterscheidet,
+    entscheidet `MSYSTEM` (clang++ für `CLANG*`).
+  - Flags und Bibliotheken: `-fopenmp`, `-lopenblas -lyaml-cpp`. Das OpenBLAS aus
+    MSYS2 enthält LAPACK, `-llapack` ist nicht nötig.
 - **Tests:** Windows wird wie im Makefile über `uname -s` erkannt.
   - `test-render` und `test-input-checks` laufen. Wo nötig, werden Ausgaben ohne
     `\r` verglichen, denn stdout im Textmodus schreibt CRLF.
@@ -169,8 +173,12 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
   - Seine Matrix enthält zwei Einträge:
     - `windows-2025` mit UCRT64 und den Paketen `mingw-w64-ucrt-x86_64-*`,
     - `windows-11-arm` mit CLANGARM64 und den Paketen `mingw-w64-clang-aarch64-*`.
-  - `msys2/setup-msys2` installiert make, coreutils (für `timeout`), die
-    Toolchain und die Bibliotheken.
+  - `msys2/setup-msys2` installiert make, die Toolchain (`gcc` bzw. `clang` und
+    `llvm-openmp`; ein Paket `openmp` gibt es in CLANGARM64 nicht) und die
+    Bibliotheken Armadillo, OpenBLAS, yaml-cpp und ffmpeg.
+  - Ein weiterer Schritt startet `bin\Release\DiscontinousGalerkin.exe` aus
+    PowerShell, also außerhalb von MSYS2, mit dem `bin`-Verzeichnis der Umgebung
+    im PATH. Das Programm findet DLLs und ffmpeg und schreibt `output.mp4`.
   - Die Schritte `make Release Debug` und `make test` laufen in `shell: msys2 {0}`.
 - **README:** ein neuer Abschnitt „Windows (MSYS2)“ mit Paketliste, Bauen und
   Starten sowie Hinweisen zu PATH und DLLs, ffmpeg und dem Menü.
@@ -185,23 +193,46 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
 - Das Menü erscheint nur in einer echten Konsole (`GetConsoleMode`), sonst gilt
   der Config-Wert.
 - Der Speichertest wird unter Windows übersprungen. macOS und Linux decken ihn ab.
+- Strg+Z steht ohne `#ifdef` im gemeinsamen Code. Unter POSIX bleibt ISIG im
+  Raw-Modus an, Strg+Z hält dort den Job an, daher entfällt
+  `test_ctrl_z_uses_config` unter POSIX mit SKIP.
 - Die Windows-Jobs laufen wie die Linux-Jobs mit `fail-fast: false`.
 - Die drei POSIX-spezifischen Menü-Tests werden unter Windows übersprungen und
   nicht nachgebaut. Strg+C beendet das Programm dort ohnehin nur über den
   Standard-Handler.
 - `make` kommt aus der MSYS-Umgebung (Paket `make`), nicht `mingw32-make`.
 
-## Offen für die Umsetzung (klärt der Builder)
+## Befunde aus der CI
 
-- Enthält OpenBLAS aus MSYS2 bereits LAPACK, oder braucht es zusätzlich
-  `-llapack` (Paket `lapack`)? Das entscheidet ein Link-Test.
-- Ist yaml-cpp 0.9.0 API-kompatibel zu 0.8? Falls nicht, genügt eine minimale
-  Anpassung, die auf allen Plattformen baut.
-- Erscheint das Menü auch im MSYS2-Terminal (mintty, ConPTY)? Das Verhalten wird
-  im README dokumentiert.
-- Unterstützt `msys2/setup-msys2` den Runner `windows-11-arm`? Falls nicht, wird
-  MSYS2 dort auf anderem Weg eingerichtet.
-- Die genauen `uname -s`-Werte der MSYS2-Umgebungen werden in der CI bestätigt.
+Das war bei der Umsetzung offen und ist in der CI geklärt (beide Windows-Jobs grün):
+
+- OpenBLAS aus MSYS2 enthält LAPACK. `-llapack` ist nicht nötig.
+- yaml-cpp 0.9 baut mit C++14 unverändert.
+- `msys2/setup-msys2` unterstützt `windows-11-arm`.
+- `uname -s` liefert auf beiden Runnern `MINGW64_NT-<Version>`, `uname -m` auch auf
+  ARM64 `x86_64`. Die Compiler-Wahl läuft deshalb über `MSYSTEM`.
+- Die ffmpeg-Pipe steht in `src/VideoPipe.cpp`. Im Textmodus (`"w"`) wurden
+  0x0A-Bytes zu 0x0D 0x0A, im Test kamen 1028 statt 1024 Bytes an; `"wb"` behebt
+  das. `cmd.exe` liefert für einen unbekannten Befehl 9009.
+- CRLF in der Ausgabe stört den Frame-Zähl-Vergleich im Video-Test unter Windows
+  nicht. `tr -d '\r'` bleibt als Absicherung.
+- `_getch` hält den zweiten Code einer Funktions- oder Pfeiltaste innerhalb der
+  CRT, außerhalb der Reichweite von `FlushConsoleInputBuffer`. Deshalb liest das
+  Menü beide Codes (`kExtendedKey`).
+- Die Menü-Tests laufen unter Windows über den ConPTY-Helfer. Windows-SKIPs:
+  `test_memory_bounded`, `test_ctrl_c_restores_terminal`,
+  `test_ignored_sigint_stays_ignored`, `test_background_job_skips_menu`.
+
+## Offen
+
+- **Gegenprobe Exit-Prompt:** Ohne `FlushConsoleInputBuffer` blieb
+  `test_enter_after_key_does_not_skip_exit_prompt` unter Windows grün. Ein
+  vorab getipptes Enter überlebt dort bis zum Exit-Prompt auch ohne den Aufruf
+  nicht. Die Ursache ist unbekannt; Verdächtige sind `cmd.exe` und ffmpeg, die
+  `_popen` während des Zeichnens startet, oder der Konsolen-Host. Der Aufruf
+  bleibt als Absicherung, aber nur unter POSIX ist die Gegenprobe wirksam.
+- Erscheint das Menü auch im MSYS2-Terminal (mintty)? Die CI kann das nicht
+  prüfen; das README sagt es so.
 - `run-integrator-menu.sh` prüft vorab, ob `run_tty` ein funktionierendes
   Terminal liefert (`test -t 0`). Ohne Terminal überspringt es die
   Terminal-Tests; in der CI (`CI` gesetzt) schlagen sie dann fehl. Die Probe muss
@@ -210,7 +241,8 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
 
 ## Prüfung
 
-- **macOS:** `make test` ist grün wie bisher (46 PASS).
+- **macOS:** `make test` ist grün (53 PASS, nur der SKIP von
+  `test_ctrl_z_uses_config`).
 - **Linux:** Die CI (x86_64, arm64) und die Docker-Images (Ubuntu 24.04/26.04,
   arm64/x64) sind grün wie bisher.
 - **Windows (CI, beide Runner):**
@@ -219,7 +251,8 @@ Die Bedienung ist dieselbe wie unter macOS und Linux.
   - Das Video hat die erwartete Frame-Zahl (ffprobe).
 - **Windows-Menü-Tests:** Die Menü-Tests laufen über den ConPTY-Helfer, nur
   die drei POSIX-spezifischen sind übersprungen.
-- **Gegenproben**, je einmal in der CI:
+- **Gegenproben**, je einmal in der CI (die dritte war unter Windows nicht rot,
+  siehe „Offen“):
   - Mit `"w"` statt `"wb"` muss der Frame-Test unter Windows fehlschlagen.
   - Ohne das Lesen des zweiten Codes einer Pfeiltaste muss
     `test_arrow_key_single_message` fehlschlagen.
