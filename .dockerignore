@@ -8,3 +8,5 @@ run
 *.mp4
 *.dat
 .DS_Store
+config.yaml
+.claude

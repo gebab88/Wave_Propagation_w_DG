@@ -1,0 +1,41 @@
+# Builds the solver and runs all tests on Linux, on x86_64 and on arm64 (the
+# Raspberry Pi architecture). The packages are those of Dockerfile.linux that
+# the build and the tests need; time(1) is for the memory test.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ffmpeg libarmadillo-dev liblapack-dev \
+            libopenblas-dev libyaml-cpp-dev make time
+
+      - name: Build Release and Debug
+        run: make Release Debug
+
+      - name: Run all tests
+        run: make test

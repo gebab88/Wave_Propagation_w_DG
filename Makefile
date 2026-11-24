@@ -10,13 +10,16 @@ ifeq ($(origin CXX), default)
   endif
 endif
 
-DEBUGOROPTI		?= -O3 #-g -O0
+# Compiler flags of `make Release` and `make Debug`. The two builds compile into
+# separate object directories (obj/Release, obj/Debug), so they never mix.
+DEBUGOROPTI		?= -O3
+DEBUG_FLAGS		?= -g -O0
 
 # Simulation parameters (order, N, time integrator, fluid/domain settings) are
 # now read at RUNTIME from config.yaml via yaml-cpp — they are no longer
 # compile-time -D macros, so no rebuild is needed to change them.
 
-BASE_CFLAGS = -Wall $(DEBUGOROPTI) -std=c++14 -pthread -Iinclude -DARMA_DONT_USE_WRAPPER
+BASE_CFLAGS = -Wall -std=c++14 -pthread -Iinclude -DARMA_DONT_USE_WRAPPER
 
 ifeq ($(UNAME_S),Darwin)
   # MacPorts paths. Armadillo headers are under /opt/local/include.
@@ -39,7 +42,7 @@ ifeq ($(UNAME_S),Darwin)
   LDFLAGS = -framework Accelerate -pthread $(OMPLIBS) -L$(MACPORTS)/lib -lyaml-cpp
 else ifeq ($(UNAME_S),Linux)
   # Linux builds use the distro BLAS/LAPACK packages. In the Docker test image
-  # those are OpenBLAS + LAPACK, and g++ supplies OpenMP via -fopenmp.
+  # and in CI those are OpenBLAS + LAPACK, and g++ supplies OpenMP via -fopenmp.
   CFLAGS  = $(BASE_CFLAGS) -fopenmp
   LDFLAGS = -pthread -fopenmp -lopenblas -llapack -lyaml-cpp
 else
@@ -53,23 +56,26 @@ endif
 
 UNAME:=$(shell uname -a)
 
-# Explicit object list so the per-file rules below are actually triggered.
+# Explicit object lists; the pattern rules below build each object.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
 OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o
 BIN= bin/Release/DiscontinousGalerkin
+DEBUG_OBJS= $(OBJS:obj/Release/%=obj/Debug/%)
+DEBUG_BIN= bin/Debug/DiscontinousGalerkin
 
 # Rebuild objects when any header changes (the rules below don't track #includes
 # otherwise, so e.g. editing include/ClassdXdt.hpp would silently not recompile).
 HEADERS= $(wildcard include/*.h include/*.hpp)
 
 # Output directories are gitignored, so make sure they exist on a fresh clone.
-$(shell mkdir -p obj/Release bin/Release bin/Debug)
+$(shell mkdir -p obj/Release obj/Debug bin/Release bin/Debug)
 
 Release:  $(OBJS) | config.yaml
 	$(CXX)  -o $(BIN) $(OBJS) $(LDFLAGS)
 
-Debug: $(OBJS) | config.yaml
-	$(CXX) -o bin/Debug/DiscontinousGalerkin $(OBJS) $(LDFLAGS)
+# Unoptimized build with debug information, for gdb/lldb.
+Debug: $(DEBUG_OBJS) | config.yaml
+	$(CXX) -o $(DEBUG_BIN) $(DEBUG_OBJS) $(LDFLAGS)
 
 # config.yaml is local and untracked; create it from the versioned template on a
 # fresh clone. An existing config.yaml is never overwritten.
@@ -77,38 +83,50 @@ config.yaml:
 	cp config_example.yaml config.yaml
 	@echo "Created config.yaml from config_example.yaml"
 
-obj/Release/main.o: src/main.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/main.o
+obj/Release/%.o: src/%.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) $(DEBUGOROPTI) -c $< -o $@
 
-obj/Release/InitialAndBoundary.o: src/InitialAndBoundary.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/InitialAndBoundary.o
-
-obj/Release/ClassdXdt.o: src/ClassdXdt.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/ClassdXdt.o
-
-obj/Release/vandermonde.o: src/vandermonde.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/vandermonde.o
-
-obj/Release/ClassPlot.o: src/ClassPlot.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/ClassPlot.o
-
-obj/Release/FrameRenderer.o: src/FrameRenderer.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) -c $< -o obj/Release/FrameRenderer.o
+obj/Debug/%.o: src/%.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) -c $< -o $@
 
 # Plain C++ test for the frame renderer (no Armadillo needed).
 test-render: obj/Release/FrameRenderer.o tests/test_frame_renderer.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
+	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_renderer.cpp obj/Release/FrameRenderer.o -o bin/Release/test_frame_renderer -pthread
 	bin/Release/test_frame_renderer
 
+# Shell test suites. Each script builds bin/Release itself and exits non-zero
+# when one of its tests fails.
+test-input-checks:
+	bash tests/run-input-checks.sh
+
+test-menu:
+	bash tests/run-integrator-menu.sh
+
+test-video:
+	bash tests/run-video-render.sh
+
+TEST_SUITES = test-render test-input-checks test-menu test-video
+
+# All test suites, one after the other even under -j (the menu tests depend on
+# timing). Every suite runs even if an earlier one failed; the target fails if
+# any suite did.
+test:
+	@failed=""; \
+	for suite in $(TEST_SUITES); do \
+	    $(MAKE) --no-print-directory $$suite || failed="$$failed $$suite"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "Failed test suites:$$failed"; exit 1; fi; \
+	echo "All test suites passed."
+
 cleanOBJ:
-	rm -rf $(OBJS)
+	rm -rf $(OBJS) $(DEBUG_OBJS)
 
 cleanBIN:
-	rm -rf bin/Release/DiscontinousGalerkin bin/Release/test_frame_renderer
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer
 
 clean:
-	rm -rf $(OBJS)
-	rm -rf $(BIN) bin/Release/test_frame_renderer
+	rm -rf $(OBJS) $(DEBUG_OBJS)
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer
 	rm -rf *.png
 	rm -rf *.mp4
 	rm -rf *.dat
@@ -116,7 +134,14 @@ clean:
 cleanPictures:
 	rm -rf *.png
 
-docker-test-linux-arm64:
-	scripts/docker-linux-arm64-test.sh
+# Linux test images (Dockerfile.linux); building runs the tests. UBUNTU picks
+# the Ubuntu release, e.g. `make docker-test-linux-x64 UBUNTU=26.04`.
+UBUNTU ?= 24.04
 
-.PHONY: cleanOBJ cleanBIN cleanAll cleanPictures Release Debug test-render docker-test-linux-arm64
+docker-test-linux-arm64:
+	scripts/docker-linux-test.sh arm64 $(UBUNTU)
+
+docker-test-linux-x64:
+	scripts/docker-linux-test.sh x64 $(UBUNTU)
+
+.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-input-checks test-menu test-video docker-test-linux-arm64 docker-test-linux-x64

@@ -14,13 +14,16 @@ if [[ "$(uname -s)" != "Linux" ]]; then
     exit 1
 fi
 
-case "$(uname -m)" in
-    aarch64|arm64) ;;
-    *)
-        echo "Smoke test must run on arm64/aarch64, got $(uname -m)" >&2
-        exit 1
-        ;;
-esac
+# Dockerfile.linux sets EXPECTED_ARCH to the image platform (amd64 or arm64),
+# so an image built for the wrong platform fails here instead of silently
+# testing the host architecture. Without it, any architecture is accepted.
+machine="$(uname -m)"
+case "${EXPECTED_ARCH:-}" in
+    "")    true ;;
+    amd64) [[ "$machine" == x86_64 ]] ;;
+    arm64) [[ "$machine" == aarch64 || "$machine" == arm64 ]] ;;
+    *)     false ;;
+esac || { echo "Smoke test expected architecture '$EXPECTED_ARCH', got $machine" >&2; exit 1; }
 
 if [[ "$skip_build" -eq 0 ]]; then
     make cleanOBJ cleanBIN
@@ -51,4 +54,4 @@ fi
 
 file "$repo_root/bin/Release/DiscontinousGalerkin"
 file output.mp4
-echo "Linux arm64 smoke test passed with $frame_count frames."
+echo "Linux $machine smoke test passed with $frame_count frames."

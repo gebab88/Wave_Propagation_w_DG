@@ -23,21 +23,36 @@ fail() { echo "FAIL $1: $2"; failures=$((failures + 1)); }
 # previous event (raw mode must be active first), then 1 s of grace.
 # Env: TTY_KEY_DELAY (default 0.5) pause before each key, TTY_TAIL (default 1)
 # seconds the input stays open after the last key, TTY_TIMEOUT (default 20).
+# TTY_CLOSE_AFTER: after the last key, wait until this text is in the output;
+# TTY_TAIL then counts from there. When the input closes, script sends ^D;
+# just before that, run_tty creates $TTY_CLOSED_MARKER.
+TTY_LOG="$work_dir/tty-output.log"
+TTY_CLOSED_MARKER="$work_dir/tty-input-closed"
 run_tty() {
     local keys=()
     while [[ $# -gt 0 && "$1" != "--" ]]; do keys+=("$1"); shift; done
     shift  # drop "--"
     local limit="${TTY_TIMEOUT:-20}"
     local delay="${TTY_KEY_DELAY:-0.5}" tail_s="${TTY_TAIL:-1}"
+    local -a script_cmd
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        ( for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done; sleep "$tail_s" ) \
-            | timeout "$limit" script -q /dev/null "$@" 2>&1 | tr -d '\r' || true
+        script_cmd=(script -q /dev/null "$@")
     else
         local cmd
         printf -v cmd '%q ' "$@"
-        ( for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done; sleep "$tail_s" ) \
-            | timeout "$limit" script -qec "$cmd" /dev/null 2>&1 | tr -d '\r' || true
+        script_cmd=(script -qec "$cmd" /dev/null)
     fi
+    : >"$TTY_LOG"
+    rm -f "$TTY_CLOSED_MARKER"
+    (
+        for k in ${keys[@]+"${keys[@]}"}; do sleep "$delay"; printf '%s' "$k"; done
+        if [[ -n "${TTY_CLOSE_AFTER:-}" ]]; then
+            deadline=$((SECONDS + limit))
+            until grep -qF -- "$TTY_CLOSE_AFTER" "$TTY_LOG" || (( SECONDS >= deadline )); do sleep 0.1; done
+        fi
+        sleep "$tail_s"
+        : >"$TTY_CLOSED_MARKER"
+    ) | timeout "$limit" "${script_cmd[@]}" 2>&1 | tee "$TTY_LOG" | tr -d '\r' || true
 }
 
 expect_contains() {  # name output needle
@@ -165,19 +180,23 @@ test_menu_time_not_in_elapsed() {
 }
 
 test_enter_after_key_does_not_skip_exit_prompt() {
-    local plot_cfg="$repo_root/tests/menu-plot-test-config.yaml" out d secs
+    local plot_cfg="$repo_root/tests/menu-plot-test-config.yaml" out d
     d="$(mktemp -d)"
-    # '2' at 0.3 s, a habitual Enter at 0.6 s, input (and thus the ^D that script
-    # forwards on close) stays open until ~8.6 s. If the queued Enter is consumed by
-    # the final cin.get(), the program exits after plotting (a few seconds at most).
-    out="$(cd "$d" && TTY_KEY_DELAY=0.3 TTY_TAIL=8 TTY_TIMEOUT=30 run_tty 2 $'\r' -- \
-        bash -c "SECONDS=0; '$BIN' '$plot_cfg'; echo exit_after=\$SECONDS")"
+    # '2' at 0.3 s and a habitual Enter at 0.6 s, while the solver still runs.
+    # The input stays open until 2 s after the exit prompt has appeared; closing
+    # it makes script send ^D, which ends the final cin.get(). Had the queued
+    # Enter answered the prompt, the program would have ended within those 2 s,
+    # before the marker exists. Waiting for the prompt instead of a fixed time
+    # matters when plotting is slow (about 23 s for x64 under QEMU).
+    out="$(cd "$d" && TTY_KEY_DELAY=0.3 TTY_CLOSE_AFTER='Press enter to exit.' TTY_TAIL=2 TTY_TIMEOUT=120 \
+        run_tty 2 $'\r' -- bash -c "'$BIN' '$plot_cfg'; if [ -e '$TTY_CLOSED_MARKER' ]; then echo exit=after_input_closed; else echo exit=before_input_closed; fi")"
     rm -rf "$d"
     expect_contains "${FUNCNAME[0]}" "$out" 'Press enter to exit.' || return
-    secs="$(grep -m1 -o 'exit_after=[0-9]*' <<<"$out" | cut -d= -f2)"
-    [[ -n "$secs" ]] || { fail "${FUNCNAME[0]}" "no exit_after line"; return; }
-    [[ "$secs" -ge 7 ]] || { fail "${FUNCNAME[0]}" "exited after ${secs}s: queued Enter skipped the exit prompt"; return; }
-    pass "${FUNCNAME[0]}"
+    case "$out" in
+        *exit=after_input_closed*)  pass "${FUNCNAME[0]}" ;;
+        *exit=before_input_closed*) fail "${FUNCNAME[0]}" "exited before the input closed: the queued Enter answered the exit prompt" ;;
+        *)                          fail "${FUNCNAME[0]}" "no exit line: the program still waited at the prompt when the timeout hit" ;;
+    esac
 }
 
 test_menu_visible_when_stdout_redirected() {
@@ -188,25 +207,51 @@ test_menu_visible_when_stdout_redirected() {
     pass "${FUNCNAME[0]}"
 }
 
-test_key_selects_method || true
-test_menu_shows_descriptions || true
-test_enter_uses_config || true
-test_invalid_key_reprompts || true
-test_arrow_key_single_message || true
-test_ctrl_d_uses_config || true
+# All tests but test_no_tty_skips_menu and test_invalid_config_fails_early need
+# a working terminal from script(1). Under QEMU 7 user emulation, Ubuntu 26.04
+# (glibc 2.43) gets none, e.g. in the x64 Docker image on Apple Silicon: its
+# tcgetattr() uses the TCGETS2 ioctl, which QEMU 7 does not implement. Without
+# a terminal those tests would fail, or pass for the wrong reason because the
+# program silently falls back to the config value, so they are skipped. In CI
+# (CI is set) they fail instead: there a missing terminal means the test setup
+# is broken, and that must not pass as a skip.
+pty_ok=0
+if [[ "$(run_tty -- sh -c 'test -t 0 && echo pty-ok')" == *pty-ok* ]]; then pty_ok=1; fi
+skipped=0
+pty_test() {  # test function
+    if (( pty_ok )); then
+        "$1" || true
+    elif [[ -n "${CI:-}" ]]; then
+        fail "$1" "script provides no working terminal (an error in CI, not a skip)"
+    else
+        echo "SKIP $1 (script provides no working terminal here)"
+        skipped=$((skipped + 1))
+    fi
+}
+
+pty_test test_key_selects_method
+pty_test test_menu_shows_descriptions
+pty_test test_enter_uses_config
+pty_test test_invalid_key_reprompts
+pty_test test_arrow_key_single_message
+pty_test test_ctrl_d_uses_config
 test_no_tty_skips_menu || true
 test_invalid_config_fails_early || true
-test_config_error_before_menu || true
-test_prompt_flushed_when_stdout_piped || true
-test_ctrl_c_restores_terminal || true
-test_ignored_sigint_stays_ignored || true
-test_background_job_skips_menu || true
-test_menu_time_not_in_elapsed || true
-test_enter_after_key_does_not_skip_exit_prompt || true
-test_menu_visible_when_stdout_redirected || true
+pty_test test_config_error_before_menu
+pty_test test_prompt_flushed_when_stdout_piped
+pty_test test_ctrl_c_restores_terminal
+pty_test test_ignored_sigint_stays_ignored
+pty_test test_background_job_skips_menu
+pty_test test_menu_time_not_in_elapsed
+pty_test test_enter_after_key_does_not_skip_exit_prompt
+pty_test test_menu_visible_when_stdout_redirected
 
 if [[ $failures -ne 0 ]]; then
     echo "$failures test(s) failed" >&2
     exit 1
 fi
-echo "All integrator menu tests passed."
+if (( skipped )); then
+    echo "All integrator menu tests passed ($skipped skipped: no working terminal)."
+else
+    echo "All integrator menu tests passed."
+fi

@@ -1,0 +1,49 @@
+# Linux test image for one platform (linux/arm64 or linux/amd64) and one Ubuntu
+# release, built by scripts/docker-linux-test.sh. Building the image compiles
+# the solver and runs the frame-renderer and smoke tests; `make test` in the
+# finished image runs the full test suite.
+#
+# The script sets BASE_IMAGE to the per-architecture repository, e.g.
+# amd64/ubuntu:26.04. Docker's legacy builder with the containerd image store
+# runs the first RUN step on the host's variant of a multi-platform base such
+# as ubuntu:26.04 whenever that variant is present locally, whatever
+# --platform says; a single-platform base leaves it no choice.
+ARG BASE_IMAGE=ubuntu:24.04
+FROM ${BASE_IMAGE}
+
+ARG TARGETARCH
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        build-essential \
+        file \
+        ffmpeg \
+        libarmadillo-dev \
+        liblapack-dev \
+        libopenblas-dev \
+        libyaml-cpp-dev \
+        make \
+        pkg-config \
+        time \
+    && rm -rf /var/lib/apt/lists/*
+
+# The smoke test checks that the container really runs this architecture
+# (amd64 or arm64) and not the host's. BuildKit derives TARGETARCH from
+# --platform; the legacy builder does not, so scripts/docker-linux-test.sh
+# passes EXPECTED_ARCH explicitly. An empty value would skip the check.
+ARG EXPECTED_ARCH=${TARGETARCH}
+RUN test -n "$EXPECTED_ARCH" \
+    || { echo "EXPECTED_ARCH is empty: build with scripts/docker-linux-test.sh or pass --build-arg EXPECTED_ARCH=amd64|arm64" >&2; exit 1; }
+ENV EXPECTED_ARCH=${EXPECTED_ARCH}
+
+WORKDIR /src
+COPY . .
+
+RUN make Release
+RUN make test-render
+RUN tests/run-linux-smoke.sh --skip-build
+
+CMD ["tests/run-linux-smoke.sh"]

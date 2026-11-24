@@ -52,19 +52,30 @@ test_ffmpeg_failure_reported() {
 
 test_memory_bounded() {
     local name="${FUNCNAME[0]}" d="$work_dir/mem"
-    if [[ "$(uname -s)" != "Darwin" ]]; then
-        echo "PASS $name (skipped: needs macOS /usr/bin/time -l)"; return
-    fi
+    # Peak memory from time(1): BSD time -l reports bytes, GNU time -v kilobytes.
+    local time_opt
+    case "$(uname -s)" in
+        Darwin) time_opt=-l ;;
+        Linux)  time_opt=-v ;;
+        *)      echo "SKIP $name (no known time(1) for $(uname -s))"; return ;;
+    esac
+    if [[ ! -x /usr/bin/time ]]; then echo "SKIP $name (/usr/bin/time not installed)"; return; fi
     mkdir -p "$d"; cd "$d"
     local log="$d/time.log"
     local cfg="$d/config.yaml"
     sed 's/^\( *EnablePlotting:\).*/\1 true/' "$DEFAULT_CFG" >"$cfg"
     local rc=0
-    /usr/bin/time -l "$BIN" "$cfg" </dev/null >"$d/out.log" 2>"$log" || rc=$?
+    /usr/bin/time "$time_opt" "$BIN" "$cfg" </dev/null >"$d/out.log" 2>"$log" || rc=$?
     cd "$work_dir"
     if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
     if ! grep -q 'Video written to' "$d/out.log"; then fail "$name" "no 'Video written to' in output"; return; fi
-    local rss; rss="$(sed -n 's/^ *\([0-9][0-9]*\)  *maximum resident set size.*/\1/p' "$log" | head -n1)"
+    local rss
+    if [[ "$time_opt" == -l ]]; then
+        rss="$(sed -n 's/^ *\([0-9][0-9]*\)  *maximum resident set size.*/\1/p' "$log" | head -n1)"
+    else
+        rss="$(sed -n 's/^.*Maximum resident set size (kbytes): *\([0-9][0-9]*\).*/\1/p' "$log" | head -n1)"
+        [[ -z "$rss" ]] || rss=$((rss * 1024))
+    fi
     if [[ -z "$rss" ]]; then fail "$name" "no max RSS in time output"; return; fi
     if (( rss < 1073741824 )); then pass "$name (max RSS $rss bytes)"
     else fail "$name" "max RSS $rss bytes >= 1 GiB"; fi

@@ -1,6 +1,7 @@
 # Discontinuous Galerkin — 1D Akustik-Wellengleichung
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://github.com/gebab88/Wave_Propagation_w_DG/actions/workflows/ci.yml/badge.svg)](https://github.com/gebab88/Wave_Propagation_w_DG/actions/workflows/ci.yml)
 
 Ein 1D-Löser für die lineare **akustische Wellengleichung** mit der **Discontinuous-Galerkin-Methode** (DG) in C++. Eine von links einlaufende Sinuswelle breitet sich durch ein Rohr aus und wird an der starren rechten Wand reflektiert; das Ergebnis wird direkt im Programm als Bildfolge gezeichnet und ohne Zwischendateien an ffmpeg zu einem Video kodiert.
 
@@ -71,33 +72,80 @@ sudo port install ffmpeg                                                   # fü
 
 ```sh
 make Release          # -> bin/Release/DiscontinousGalerkin (legt config.yaml aus config_example.yaml an, falls sie fehlt)
-make test-render      # Unit-Tests für den Frame-Renderer
-make clean            # Objektdateien, Binary, *.png, *.mp4, *.dat entfernen
+make Debug            # -> bin/Debug/DiscontinousGalerkin, ohne Optimierung und mit Debug-Infos
+make test             # alle Tests, siehe unten
+make clean            # Objektdateien, Binaries, *.png, *.mp4, *.dat entfernen
 ```
 
-Simulationsparameter (Ordnung, `N`, Zeitintegrator, Fluid/Gebiet) werden **nicht** mehr zur Compile-Zeit gesetzt, sondern zur Laufzeit aus `config.yaml` gelesen — dafür ist **kein** Neukompilieren nötig (siehe [Konfiguration](#konfiguration-configyaml)). Das einzige Compile-Zeit-Flag im `Makefile` ist:
+Simulationsparameter (Ordnung, `N`, Zeitintegrator, Fluid/Gebiet) werden **nicht** mehr zur Compile-Zeit gesetzt, sondern zur Laufzeit aus `config.yaml` gelesen — dafür ist **kein** Neukompilieren nötig (siehe [Konfiguration](#konfiguration-configyaml)). Zur Compile-Zeit lassen sich nur noch die Compiler-Flags wählen:
 
 | Variable | Default | Bedeutung |
 |---|---|---|
-| `DEBUGOROPTI` | `-O3` | Optimierungs-/Debug-Flags |
+| `DEBUGOROPTI` | `-O3` | Flags für `make Release` |
+| `DEBUG_FLAGS` | `-g -O0` | Flags für `make Debug` |
 
-### Linux/arm64 via Docker testen
+Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/Debug`). Ein Wechsel zwischen beiden erzwingt also keinen Neubau.
+
+### Tests
+
+`make test` startet alle Testpakete nacheinander. Auch wenn eines fehlschlägt, laufen die übrigen weiter, und am Ende steht, welche fehlgeschlagen sind. Einzeln:
+
+| Target | Datei | Prüft |
+|---|---|---|
+| `make test-render` | `tests/test_frame_renderer.cpp` | Frame-Renderer (C++-Unit-Tests) |
+| `make test-input-checks` | `tests/run-input-checks.sh` | Eingabeprüfung und Abbruch instabiler Rechnungen |
+| `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
+| `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
+
+Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 14 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl.
+
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` unter Ubuntu 24.04 aus, auf x86_64 und auf arm64.
+
+### Linux via Docker testen (arm64 und x64)
 
 Der macOS-Build nutzt weiterhin Accelerate/MacPorts. Auf Linux schaltet der
 `Makefile` automatisch auf `g++`, OpenBLAS/LAPACK, yaml-cpp und `-fopenmp` um.
-Für einen schnellen ARM64-Smoke-Test gibt es ein Docker-Target:
+Für schnelle Linux-Tests gibt es zwei Docker-Targets. Sie nutzen Ubuntu 24.04,
+`UBUNTU=<version>` wählt eine andere Version:
 
 ```sh
 # falls Colima verwendet wird:
 colima start --arch aarch64
 
-make docker-test-linux-arm64
+make docker-test-linux-arm64              # linux/arm64, auf Apple Silicon nativ
+make docker-test-linux-x64                # linux/amd64, auf Apple Silicon emuliert
+make docker-test-linux-x64 UBUNTU=26.04   # dasselbe mit Ubuntu 26.04
 ```
 
-Der Test baut ein `linux/arm64`-Image aus `Dockerfile.linux-arm64`, kompiliert
-das Projekt in Ubuntu 24.04 und startet eine kleine Simulation mit
-`tests/linux-smoke-config.yaml`. Dabei werden Config-Parsing, generische Ordnung
-3, Frame-Rendering und ffmpeg-Video-Encoding geprüft.
+Beide bauen aus `Dockerfile.linux` ein Image für die jeweilige Plattform,
+kompilieren das Projekt, führen `make test-render` aus und starten eine kleine
+Simulation mit `tests/linux-smoke-config.yaml`. Dabei werden Config-Parsing,
+generische Ordnung 3, Frame-Rendering und ffmpeg-Video-Encoding geprüft. Läuft
+der Container nicht auf der gewünschten Architektur, bricht der Smoke-Test ab.
+Die lokale `config.yaml` kommt nicht ins Image; der Build legt sie aus
+`config_example.yaml` an.
+
+Das Image heißt `dg-linux-<arch>-test:<version>`. Darin lassen sich die volle
+Testsuite oder eine Shell starten:
+
+```sh
+docker run --rm --platform linux/amd64 dg-linux-x64-test:24.04 make test
+docker run --rm --platform linux/arm64 dg-linux-arm64-test:24.04 make test
+docker run --rm -it --platform linux/amd64 dg-linux-x64-test:24.04 bash
+```
+
+Auf Apple Silicon emuliert colima x64 über QEMU (`binfmt: true` in der
+colima-Konfiguration) oder, mit `colima start --vz-rosetta`, über Rosetta.
+Getestet sind Ubuntu 24.04 und 26.04. Auf einem Apple M5 Pro mit QEMU dauert der
+erste Build etwa 1½ Minuten (arm64) bzw. 3 Minuten (x64), `make test` im Image
+etwa 40 Sekunden bzw. 4 bis 5 Minuten. Unter QEMU stürzt g++ vereinzelt mit
+„Segmentation fault“ ab. Das liegt am Emulator, ein erneuter Aufruf baut durch.
+
+Mit Ubuntu 26.04 überspringt `make test` im per QEMU emulierten x64-Image die
+14 Menü-Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
+ioctl `TCGETS2` ab, und das kennt QEMU 7.0 nicht. Dort sieht also kein Programm
+ein Terminal. Nativ unter arm64 laufen mit 26.04 alle Tests.
+Die CI testet beide Architekturen nativ ([Tests](#tests)).
 
 ---
 
@@ -110,9 +158,9 @@ mkdir -p run && cd run
 ../bin/Release/DiscontinousGalerkin </dev/null   # findet config.yaml automatisch
 ```
 
-Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `bash tests/run-video-render.sh` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
+Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `make test-video` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
 
-Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `bash tests/run-integrator-menu.sh`, die Tests der Eingabe- und Stabilitätsprüfung mit `bash tests/run-input-checks.sh`.
+Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `make test-menu` ([Tests](#tests)).
 
 ---
 
