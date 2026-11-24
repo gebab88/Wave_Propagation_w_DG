@@ -142,7 +142,7 @@ etwa 40 Sekunden bzw. 4 bis 5 Minuten. Unter QEMU stürzt g++ vereinzelt mit
 „Segmentation fault“ ab. Das liegt am Emulator, ein erneuter Aufruf baut durch.
 
 Mit Ubuntu 26.04 überspringt `make test` im per QEMU emulierten x64-Image die
-XX Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
+16 Menü-Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
 ioctl `TCGETS2` ab, und das kennt QEMU 7.0 nicht. Dort sieht also kein Programm
 ein Terminal. Nativ unter arm64 laufen mit 26.04 alle Tests.
 Die CI testet beide Architekturen nativ ([Tests](#tests)).
