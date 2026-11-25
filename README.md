@@ -40,6 +40,7 @@ Ausführliche technische Dokumentation mit Herleitung, Stabilitätsgrenzen und g
 | `src/InitialAndBoundary.{cpp,hpp}` | Anfangs- und Randbedingungen |
 | `src/vandermonde.{cpp,hpp}` | Vandermonde- & Differentiationsmatrix (für die Steifigkeitsmatrix) |
 | `src/FrameSampler.{cpp,hpp}` | Wählt die Video-Frames: feste Zeitabstände, linear zwischen den Rechenschritten interpoliert |
+| `src/SystemMemory.{cpp,hpp}` | Fragt den eingebauten RAM ab (Grenze für den Frame-Puffer) |
 | `src/FrameRenderer.{cpp,hpp}` | Zeichnet die Video-Frames: Achsen, Gitter, Kurve |
 | `src/ClassPlot.{cpp,hpp}` | Paralleles Zeichnen der Frames, Streaming der rohen Frames nach ffmpeg |
 | `src/VideoPipe.{cpp,hpp}` | Pipe zu ffmpeg: Starten, Quoting, Exit-Status, je eine Variante für POSIX und Windows |
@@ -231,7 +232,7 @@ Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die pr
 
 Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, `RungeKuttaSecond`, `RungeKuttaSecondOrder`, `PredictorCorrectorHeun`.
 
-Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch vor dem Menü: `CFLReserve`, `c_0` und `rho_0` müssen positiv sein, `x1` größer als `x0` und `t1` größer als `t0`. `VideoTimePerSecond` muss positiv und endlich sein; mit Plot sind höchstens 1 000 000 Frames erlaubt. Diese Werte und `freq_i` dürfen außerdem nicht `.nan` oder `.inf` sein. Während der Rechnung prüft das Programm nach jedem Schritt den Druck. Ist er nicht mehr endlich oder betragsmäßig größer als 4, das Doppelte des exakten Maximums, bricht es mit einer Meldung und Status 1 ab, ohne Video. Das passiert, wenn `CFLReserve` für das gewählte Verfahren zu groß ist, beim Euler-Verfahren etwa schon mit dem Standardwert.
+Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch vor dem Menü: `CFLReserve`, `c_0` und `rho_0` müssen positiv sein, `x1` größer als `x0` und `t1` größer als `t0`. `VideoTimePerSecond` muss positiv und endlich sein; mit Plot sind höchstens 1 000 000 Frames erlaubt, und die Frames dürfen höchstens 60 % des eingebauten RAMs belegen (4 GB, wenn sich der RAM nicht ermitteln lässt). Diese Werte und `freq_i` dürfen außerdem nicht `.nan` oder `.inf` sein. Während der Rechnung prüft das Programm nach jedem Schritt den Druck. Ist er nicht mehr endlich oder betragsmäßig größer als 4, das Doppelte des exakten Maximums, bricht es mit einer Meldung und Status 1 ab, ohne Video. Das passiert, wenn `CFLReserve` für das gewählte Verfahren zu groß ist, beim Euler-Verfahren etwa schon mit dem Standardwert.
 
 ---
 

@@ -21,7 +21,8 @@ EnablePlotting: true
 # Simulated time shown per second of video [s]. Frames are taken every
 # VideoTimePerSecond/60 s of simulated time (60 fps), so the wave moves at
 # the same speed on screen for every grid. With plotting, at most 1,000,000
-# frames are allowed. Default if missing: 1.0e-3.
+# frames are allowed and the frames may use at most 60% of the installed RAM.
+# Default if missing: 1.0e-3.
 VideoTimePerSecond: 1.0e-3
 
 # On Raspberry Pi, use OpenMP for solver cell loops from N >= 50 with two
