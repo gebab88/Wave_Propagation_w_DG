@@ -28,6 +28,7 @@
 #include "vandermonde.hpp"
 #include "ClassPlot.hpp"
 #include "FrameSampler.hpp"
+#include "SystemMemory.hpp"
 
 #ifdef _WIN32
 // After all other headers: the min/max macros would break std::max and Armadillo.
@@ -387,6 +388,21 @@ int main( int argc, char *argv[] ){
                  << nFrames << " video frames for t0 .. t1; at most "
                  << static_cast<long long>(FrameSampler::kMaxFrames)
                  << " are allowed. Increase VideoTimePerSecond or shorten t1 - t0." << endl;
+            exit(EXIT_FAILURE);
+        }
+        const double ramBytes    = installedRamBytes();
+        const double neededBytes = FrameSampler::bufferBytes(nFrames, static_cast<double>(N) * order);
+        const double limitBytes  = FrameSampler::maxBufferBytes(ramBytes);
+        if (neededBytes > limitBytes) {
+            const std::string limitSource = ramBytes > 0
+                ? std::to_string(std::lround(FrameSampler::kMaxRamFraction * 100)) + "% of the RAM"
+                : std::string("RAM size unknown");
+            cerr << "Config error: the video needs " << std::fixed << std::setprecision(1)
+                 << neededBytes / 1.0e9 << " GB (" << std::setprecision(0) << nFrames
+                 << " frames x " << static_cast<double>(N) * order << " values); at most "
+                 << std::setprecision(1) << limitBytes / 1.0e9 << " GB (" << limitSource
+                 << ") are allowed. Increase VideoTimePerSecond, shorten t1 - t0 or reduce N or order."
+                 << endl;
             exit(EXIT_FAILURE);
         }
     }

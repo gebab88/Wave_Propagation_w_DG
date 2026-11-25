@@ -153,6 +153,19 @@ test_frame_limit_ignored_without_plotting() {
 }
 test_frame_limit_ignored_without_plotting
 
+# Without plotting the frame buffer does not exist, so the memory limit does
+# not apply either. With plotting this config would need 900 057 frames x
+# 16 000 values, about 115 GB.
+test_frame_buffer_limit_ignored_without_plotting() {
+    local cfg="$work_dir/nomemlimit.yaml"
+    write_cfg "$cfg" N=4000 order=4 VideoTimePerSecond=5.333e-9
+    run_solver "$cfg" 60
+    [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
+    [[ "$out" == *'The calculations are finished!'* ]] || { fail "${FUNCNAME[0]}" "run did not finish"; return; }
+    pass "${FUNCNAME[0]}"
+}
+test_frame_buffer_limit_ignored_without_plotting
+
 # A non-positive time step (and an endless time loop) without these checks:
 expect_rejected test_swapped_domain_rejected        x1 x0=0.5 x1=0.0
 expect_rejected test_empty_domain_rejected          x1 x0=0.5 x1=0.5
@@ -177,6 +190,10 @@ expect_rejected test_nan_video_time_rejected       VideoTimePerSecond VideoTimeP
 expect_rejected test_infinite_video_time_rejected  VideoTimePerSecond VideoTimePerSecond=.inf
 # 8e-5 s at 1e-12 s per video second would need 4.8e9 frames:
 expect_rejected test_too_many_frames_rejected      VideoTimePerSecond EnablePlotting=true VideoTimePerSecond=1.0e-12
+# 480 001 frames x 800 000 values: about 3 TB, more than any RAM.
+expect_rejected test_frame_buffer_too_large_rejected "60% of the RAM" EnablePlotting=true N=100000 order=8 VideoTimePerSecond=1.0e-8
+# Too many frames and too much memory: the frame limit is reported.
+expect_rejected test_frame_limit_checked_first "video frames for t0" EnablePlotting=true N=100000 order=8 VideoTimePerSecond=1.0e-12
 
 # Euler at the default CFLReserve: |p| passes 1e30 within 2 ms but stays finite.
 expect_stopped test_unstable_euler_stopped          TimeIntegration=EulerExplicit
