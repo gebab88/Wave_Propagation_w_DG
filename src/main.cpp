@@ -395,9 +395,9 @@ int main( int argc, char *argv[] ){
                 ? std::to_string(std::lround(FrameSampler::kMaxRamFraction * 100)) + "% of the RAM"
                 : std::string("RAM size unknown");
             cerr << "Config error: the video needs " << std::fixed << std::setprecision(1)
-                 << neededBytes / 1.0e9 << " GB (" << std::setprecision(0) << nFrames
-                 << " frames x " << valuesPerFrame << " values); at most "
-                 << std::setprecision(1) << limitBytes / 1.0e9 << " GB (" << limitSource
+                 << FrameSampler::gbRoundedUp(neededBytes) << " GB (" << std::setprecision(0)
+                 << nFrames << " frames x " << valuesPerFrame << " values); at most "
+                 << std::setprecision(1) << FrameSampler::gbRoundedDown(limitBytes) << " GB (" << limitSource
                  << ") are allowed. Increase VideoTimePerSecond, shorten t1 - t0 or reduce N or order."
                  << endl;
             exit(EXIT_FAILURE);

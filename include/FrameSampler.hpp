@@ -17,6 +17,11 @@ public:
     // kMaxRamFraction * ramBytes, or kFallbackMaxBytes when ramBytes <= 0 (unknown).
     static double maxBufferBytes(double ramBytes);
 
+    // Bytes as GB (1e9) to one decimal, for messages: a need is rounded up and
+    // a limit down, so a need above the limit never shows the same number.
+    static double gbRoundedUp(double bytes);
+    static double gbRoundedDown(double bytes);
+
     // K + 1 with K = floor((t1 - t0) / interval + 1e-9). Returned as double so
     // that a tiny interval cannot overflow; callers check it against kMaxFrames.
     static double frameCount(double t0, double t1, double interval);

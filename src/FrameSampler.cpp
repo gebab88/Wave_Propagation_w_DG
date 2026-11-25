@@ -15,6 +15,14 @@ double FrameSampler::maxBufferBytes(double ramBytes) {
     return ramBytes > 0 ? kMaxRamFraction * ramBytes : kFallbackMaxBytes;
 }
 
+double FrameSampler::gbRoundedUp(double bytes) {
+    return std::ceil(bytes / 1.0e8) / 10.0;
+}
+
+double FrameSampler::gbRoundedDown(double bytes) {
+    return std::floor(bytes / 1.0e8) / 10.0;
+}
+
 double FrameSampler::frameCount(double t0, double t1, double interval) {
     return std::floor((t1 - t0) / interval + 1e-9) + 1.0;
 }

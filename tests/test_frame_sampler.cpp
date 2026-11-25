@@ -129,6 +129,17 @@ static void test_max_buffer_bytes() {
     report("test_max_buffer_bytes", before);
 }
 
+// A need just above the limit must not print as the same number of GB.
+static void test_gb_rounding() {
+    const int before = failures;
+    CHECK(near(FrameSampler::gbRoundedUp(41.24e9), 41.3));
+    CHECK(near(FrameSampler::gbRoundedDown(41.23e9), 41.2));
+    CHECK(near(FrameSampler::gbRoundedUp(41.2e9), 41.2));   // exact tenths stay
+    CHECK(near(FrameSampler::gbRoundedDown(41.2e9), 41.2));
+    CHECK(FrameSampler::gbRoundedUp(41.2e9 + 1.0) > FrameSampler::gbRoundedDown(41.2e9));
+    report("test_gb_rounding", before);
+}
+
 static void test_installed_ram_is_plausible() {
     const int before = failures;
     const double ram = installedRamBytes();
@@ -146,6 +157,7 @@ int main() {
     test_advance_after_last_frame_is_noop();
     test_buffer_bytes();
     test_max_buffer_bytes();
+    test_gb_rounding();
     test_installed_ram_is_plausible();
     if (failures) std::printf("%d check(s) failed\n", failures);
     return failures ? 1 : 0;
