@@ -39,6 +39,7 @@ Ausführliche technische Dokumentation mit Herleitung, Stabilitätsgrenzen und g
 | `src/ClassdXdt.{cpp,hpp}` | Räumlicher DG-Operator (rechte Seite der ODE, numerischer Fluss) + Zeitintegratoren |
 | `src/InitialAndBoundary.{cpp,hpp}` | Anfangs- und Randbedingungen |
 | `src/vandermonde.{cpp,hpp}` | Vandermonde- & Differentiationsmatrix (für die Steifigkeitsmatrix) |
+| `src/FrameSampler.{cpp,hpp}` | Wählt die Video-Frames: feste Zeitabstände, linear zwischen den Rechenschritten interpoliert |
 | `src/FrameRenderer.{cpp,hpp}` | Zeichnet die Video-Frames: Achsen, Gitter, Kurve |
 | `src/ClassPlot.{cpp,hpp}` | Paralleles Zeichnen der Frames, Streaming der rohen Frames nach ffmpeg |
 | `src/VideoPipe.{cpp,hpp}` | Pipe zu ffmpeg: Starten, Quoting, Exit-Status, je eine Variante für POSIX und Windows |
@@ -95,6 +96,7 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 |---|---|---|
 | `make test-render` | `tests/test_frame_renderer.cpp` | Frame-Renderer (C++-Unit-Tests) |
 | `make test-pipe` | `tests/test_video_pipe.cpp` | Pipe zu ffmpeg: Bytes kommen unverändert an, Exit-Status (C++-Unit-Tests) |
+| `make test-sampler` | `tests/test_frame_sampler.cpp` | Frame-Sampler: Zeitpunkte, Interpolation, Grenzfälle (C++-Unit-Tests) |
 | `make test-input-checks` | `tests/run-input-checks.sh` | Eingabeprüfung und Abbruch instabiler Rechnungen |
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
@@ -183,14 +185,14 @@ bin/Release/DiscontinousGalerkin.exe
 
 ## Ausführen
 
-Das Programm zeichnet **pro gespeichertem Zeitschritt einen Frame** (800×600, 60 fps, y-Achse fest −2…2) im Speicher und streamt ihn direkt in ffmpeg; es entstehen keine PNG-Dateien, nur `output.mp4` im aktuellen Verzeichnis. Am Ende wartet das Programm mit `cin.get()` auf Enter. Fehlt ffmpeg oder bricht es ab, erscheint `Video encoding failed …`, das Programm läuft aber normal weiter.
+Eine Video-Sekunde zeigt `VideoTimePerSecond` Simulationszeit: Das Programm zeichnet alle `VideoTimePerSecond/60` s Simulationszeit einen Frame (800×600, 60 fps, y-Achse fest −2…2). Die Welle läuft damit für jedes Gitter und jede Ordnung gleich schnell. Mit der Default-Konfiguration sind es 1201 Frames, also 20 s Video. Ohne Plot speichert das Programm keine Zwischenstände. Das Programm zeichnet die Frames im Speicher und streamt sie direkt in ffmpeg; es entstehen keine PNG-Dateien, nur `output.mp4` im aktuellen Verzeichnis. Am Ende wartet das Programm mit `cin.get()` auf Enter. Fehlt ffmpeg oder bricht es ab, erscheint `Video encoding failed …`, das Programm läuft aber normal weiter.
 
 ```sh
 mkdir -p run && cd run
 ../bin/Release/DiscontinousGalerkin </dev/null   # findet config.yaml automatisch
 ```
 
-Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit der Default-Konfiguration entstehen ~12000 Frames; Gesamtlaufzeit ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `make test-video` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
+Ohne Argument wird `config.yaml` zuerst im aktuellen Verzeichnis gesucht, sonst **neben der Binary** (Repo-Wurzel, zwei Ebenen über `bin/Release/`) — der `run/`-Workflow braucht daher kein Argument. Ein expliziter Pfad als erstes Argument hat Vorrang (z. B. `../bin/Release/DiscontinousGalerkin meine_config.yaml`). Das `</dev/null` überspringt den blockierenden „Press enter to exit"-Prompt. Mit `VideoTimePerSecond: 1.0e-4` statt des Defaults entstehen ~12000 Frames; Gesamtlaufzeit dann ca. **5,5 s** (Simulation ~0,7 s, Zeichnen + Video ~4,8 s). Der Test dazu: `make test-video` (die Shell-Tests brauchen `timeout` — auf aktuellem macOS in `/usr/bin`, sonst liefert MacPorts-coreutils `gtimeout` — und `ffprobe` aus dem ffmpeg-Port).
 
 Im Terminal erscheint vor der Rechnung ein Menü zur Wahl des Zeitintegrationsverfahrens: Taste `1`–`5` wählt ein Verfahren, Enter übernimmt den Wert aus der Config. Kommt die Eingabe (stdin) aus einer Pipe oder von `/dev/null`, oder läuft das Programm als Hintergrundjob, wird das Menü übersprungen und der Config-Wert verwendet; Ausgabe-Pipes wie `| tee` zeigen das Menü weiterhin an. Die Menü-Tests laufen mit `make test-menu` ([Tests](#tests)).
 
@@ -209,6 +211,7 @@ Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wir
 | `t0, t1` | `0.0, 2e-2` | Zeitintervall [s] |
 | `CFLReserve` | `0.45` | ordnungsunabhängige Sicherheitsfraktion des CFL-Limits |
 | `EnablePlotting` | `true` | `false` für reine Rechen-Benchmarks ohne MP4-Ausgabe |
+| `VideoTimePerSecond` | `1e-3` | Simulationszeit pro Video-Sekunde [s]; Frames alle `VideoTimePerSecond/60` s, linear zwischen den Rechenschritten interpoliert |
 | `OpenMPMinCells` | `50` | Zellzahl, ab der die OpenMP-Zellschleife mit `OpenMPThreads` aktiv wird (`0` erzwingt OpenMP) |
 | `OpenMPThreads` | `2` | Anzahl OpenMP-Threads für mittlere Fälle |
 | `OpenMPLargeMinCells` | `512` | Zellzahl, ab der `OpenMPLargeThreads` verwendet wird (`0` deaktiviert die zweite Schwelle) |
@@ -224,7 +227,7 @@ Der **Zeitschritt** ist ordnungsabhängig (DG-CFL):
 deltaT = CFLReserve · dx / (|c₀| · (2·order − 1))
 ```
 
-Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die praktisch nutzbare RK4-Grenze sinkt von ≈ 1,43 bei Ordnung 2 auf ≈ 0,69 bei Ordnung 8, siehe [Zeitintegration](docs/zeitintegration.md#4-stabilität)). Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Frames.
+Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die praktisch nutzbare RK4-Grenze sinkt von ≈ 1,43 bei Ordnung 2 auf ≈ 0,69 bei Ordnung 8, siehe [Zeitintegration](docs/zeitintegration.md#4-stabilität)). Höhere Ordnung ⇒ kleinerer Zeitschritt ⇒ mehr Rechenschritte; die Frame-Zahl bleibt gleich.
 
 Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, `RungeKuttaSecond`, `RungeKuttaSecondOrder`, `PredictorCorrectorHeun`.
 
@@ -236,7 +239,7 @@ Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch v
 
 - **`-O3`** statt `-O0`: ~2,3× auf die Simulation.
 - **Block-weiser Volumenterm:** Statt der dichten Matrix `A = kron(eye(N), Q)` wird `Q` zellweise angewandt (`vectorise(Q * reshape(X, 2·order, N))`) — ~N× weniger Arbeit; als GEMM, das Accelerate bei großem N über Kerne parallelisiert.
-- **Paralleles Zeichnen** (`ClassPlot`, `FrameRenderer`, `std::thread`): Frames werden in Blöcken von `4 × Kernzahl` parallel in einen wiederverwendeten Puffer gezeichnet und der Reihe nach über eine Pipe an ffmpeg geschrieben. Der Speicherbedarf bleibt unabhängig von der Frame-Zahl beschränkt. → Zeichnen + Kodieren ~4,8 s für ~12000 Frames (vorher ~13 s mit gnuplot + PNGs).
+- **Paralleles Zeichnen** (`ClassPlot`, `FrameRenderer`, `std::thread`): Frames werden in Blöcken von `4 × Kernzahl` parallel in einen wiederverwendeten Puffer gezeichnet und der Reihe nach über eine Pipe an ffmpeg geschrieben. Der Speicherbedarf bleibt unabhängig von der Frame-Zahl beschränkt. → Zeichnen + Kodieren ~4,8 s für ~12000 Frames (Lauf mit `VideoTimePerSecond: 1.0e-4`; vorher ~13 s mit gnuplot + PNGs).
 - **OpenMP-Zellschleife** in `FluidMatrix`, auf dem Raspberry Pi standardmäßig aktiviert ab `N ≥ 50` mit 2 Threads und ab `N ≥ 512` mit 4 Threads. `OpenMPMinCells: 0` erzwingt OpenMP für Benchmarks. `scripts/benchmark-openmp.sh` testet mehrere `N`/Thread-Kombinationen ohne Plotting.
 
 ---
