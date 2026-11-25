@@ -72,7 +72,7 @@ UNAME:=$(shell uname -a)
 
 # Explicit object lists; the pattern rules below build each object.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
-OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o obj/Release/VideoPipe.o
+OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o obj/Release/VideoPipe.o obj/Release/FrameSampler.o
 BIN= bin/Release/DiscontinousGalerkin$(EXE)
 DEBUG_OBJS= $(OBJS:obj/Release/%=obj/Debug/%)
 DEBUG_BIN= bin/Debug/DiscontinousGalerkin$(EXE)
@@ -113,6 +113,11 @@ test-pipe: obj/Release/VideoPipe.o tests/test_video_pipe.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_video_pipe.cpp obj/Release/VideoPipe.o -o bin/Release/test_video_pipe$(EXE)
 	bin/Release/test_video_pipe$(EXE)
 
+# Unit test for the frame sampler (uses Armadillo, so it links like the solver).
+test-sampler: obj/Release/FrameSampler.o tests/test_frame_sampler.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_sampler.cpp obj/Release/FrameSampler.o -o bin/Release/test_frame_sampler$(EXE) $(LDFLAGS)
+	bin/Release/test_frame_sampler$(EXE)
+
 # Shell test suites. Each script builds bin/Release itself and exits non-zero
 # when one of its tests fails.
 test-input-checks:
@@ -133,7 +138,7 @@ bin/Release/conpty_run.exe: tests/conpty_run.cpp
 	$(CXX) -Wall -std=c++14 -O2 tests/conpty_run.cpp -o $@
 endif
 
-TEST_SUITES = test-render test-pipe test-input-checks test-menu test-video
+TEST_SUITES = test-render test-pipe test-sampler test-input-checks test-menu test-video
 
 # All test suites, one after the other even under -j (the menu tests depend on
 # timing). Every suite runs even if an earlier one failed; the target fails if
@@ -150,11 +155,11 @@ cleanOBJ:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
 
 cleanBIN:
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/conpty_run$(EXE)
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/test_frame_sampler$(EXE) bin/Release/conpty_run$(EXE)
 
 clean:
 	rm -rf $(OBJS) $(DEBUG_OBJS)
-	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/conpty_run$(EXE)
+	rm -rf $(BIN) $(DEBUG_BIN) bin/Release/test_frame_renderer bin/Release/test_video_pipe$(EXE) bin/Release/test_frame_sampler$(EXE) bin/Release/conpty_run$(EXE)
 	rm -rf *.png
 	rm -rf *.mp4
 	rm -rf *.dat
@@ -172,4 +177,4 @@ docker-test-linux-arm64:
 docker-test-linux-x64:
 	scripts/docker-linux-test.sh x64 $(UBUNTU)
 
-.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-input-checks test-menu test-video conpty-run docker-test-linux-arm64 docker-test-linux-x64
+.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-sampler test-input-checks test-menu test-video conpty-run docker-test-linux-arm64 docker-test-linux-x64
