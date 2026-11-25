@@ -155,10 +155,12 @@ test_frame_limit_ignored_without_plotting
 
 # Without plotting the frame buffer does not exist, so the memory limit does
 # not apply either. With plotting this config would need 900 057 frames x
-# 16 000 values, about 115 GB.
+# 160 000 values, about 1.15 TB, so it is rejected on any machine with less
+# than 1.9 TB of RAM. Order 8 is the highest order with a measured CFL limit
+# (docs/zeitintegration.md, section 4.4); the run takes about 32 steps.
 test_frame_buffer_limit_ignored_without_plotting() {
     local cfg="$work_dir/nomemlimit.yaml"
-    write_cfg "$cfg" N=4000 order=4 t1=8.0e-6 VideoTimePerSecond=5.333e-10
+    write_cfg "$cfg" N=20000 order=8 t1=8.0e-8 VideoTimePerSecond=5.333e-12
     run_solver "$cfg" 60
     [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
     [[ "$out" == *'The calculations are finished!'* ]] || { fail "${FUNCNAME[0]}" "run did not finish"; return; }
