@@ -72,7 +72,7 @@ UNAME:=$(shell uname -a)
 
 # Explicit object lists; the pattern rules below build each object.
 # (The old `obj/Release/*.o` glob matched nothing on a clean tree and broke the build.)
-OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o obj/Release/VideoPipe.o obj/Release/FrameSampler.o
+OBJS= obj/Release/main.o obj/Release/InitialAndBoundary.o obj/Release/ClassdXdt.o obj/Release/vandermonde.o obj/Release/ClassPlot.o obj/Release/FrameRenderer.o obj/Release/VideoPipe.o obj/Release/FrameSampler.o obj/Release/SystemMemory.o
 BIN= bin/Release/DiscontinousGalerkin$(EXE)
 DEBUG_OBJS= $(OBJS:obj/Release/%=obj/Debug/%)
 DEBUG_BIN= bin/Debug/DiscontinousGalerkin$(EXE)
@@ -114,8 +114,8 @@ test-pipe: obj/Release/VideoPipe.o tests/test_video_pipe.cpp $(HEADERS)
 	bin/Release/test_video_pipe$(EXE)
 
 # Unit test for the frame sampler (uses Armadillo, so it links like the solver).
-test-sampler: obj/Release/FrameSampler.o tests/test_frame_sampler.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_sampler.cpp obj/Release/FrameSampler.o -o bin/Release/test_frame_sampler$(EXE) $(LDFLAGS)
+test-sampler: obj/Release/FrameSampler.o obj/Release/SystemMemory.o tests/test_frame_sampler.cpp $(HEADERS)
+	$(CXX) $(CFLAGS) $(DEBUGOROPTI) tests/test_frame_sampler.cpp obj/Release/FrameSampler.o obj/Release/SystemMemory.o -o bin/Release/test_frame_sampler$(EXE) $(LDFLAGS)
 	bin/Release/test_frame_sampler$(EXE)
 
 # Shell test suites. Each script builds bin/Release itself and exits non-zero

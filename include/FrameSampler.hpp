@@ -8,6 +8,14 @@
 class FrameSampler {
 public:
     static constexpr double kMaxFrames = 1000000;
+    static constexpr double kMaxRamFraction = 0.6;      // share of the installed RAM the frames may use
+    static constexpr double kFallbackMaxBytes = 4.0e9;  // limit when the RAM size is unknown
+
+    // Bytes of the frame buffer: frames x (valuesPerFrame + 1) doubles (values plus frame time).
+    static double bufferBytes(double frames, double valuesPerFrame);
+
+    // kMaxRamFraction * ramBytes, or kFallbackMaxBytes when ramBytes <= 0 (unknown).
+    static double maxBufferBytes(double ramBytes);
 
     // K + 1 with K = floor((t1 - t0) / interval + 1e-9). Returned as double so
     // that a tiny interval cannot overflow; callers check it against kMaxFrames.

@@ -1,5 +1,6 @@
 // Plain C++ checks for FrameSampler (no test framework in this project).
 #include "FrameSampler.hpp"
+#include "SystemMemory.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -108,6 +109,34 @@ static void test_advance_after_last_frame_is_noop() {
     report("test_advance_after_last_frame_is_noop", before);
 }
 
+static bool rel_near(double a, double b) { return std::fabs(a - b) <= 1e-12 * std::fabs(b); }
+
+static void test_buffer_bytes() {
+    const int before = failures;
+    CHECK(FrameSampler::bufferBytes(1201, 250) == 2411608);
+    CHECK(rel_near(FrameSampler::bufferBytes(480001, 800000), 480001.0 * 800001.0 * 8.0));
+    const double huge = FrameSampler::bufferBytes(1e6, 1e9);
+    CHECK(huge < std::numeric_limits<double>::infinity());
+    CHECK(huge > 8e15);
+    report("test_buffer_bytes", before);
+}
+
+static void test_max_buffer_bytes() {
+    const int before = failures;
+    CHECK(rel_near(FrameSampler::maxBufferBytes(8e9), 4.8e9));
+    CHECK(FrameSampler::maxBufferBytes(0) == 4.0e9);
+    CHECK(FrameSampler::maxBufferBytes(-1) == 4.0e9);
+    report("test_max_buffer_bytes", before);
+}
+
+static void test_installed_ram_is_plausible() {
+    const int before = failures;
+    const double ram = installedRamBytes();
+    CHECK(ram > 1e9);
+    CHECK(ram < 1e15);
+    report("test_installed_ram_is_plausible", before);
+}
+
 int main() {
     test_frame_count();
     test_times_start_at_t0();
@@ -115,6 +144,9 @@ int main() {
     test_solver_like_loop_fills_all_frames();
     test_last_time_not_after_t1();
     test_advance_after_last_frame_is_noop();
+    test_buffer_bytes();
+    test_max_buffer_bytes();
+    test_installed_ram_is_plausible();
     if (failures) std::printf("%d check(s) failed\n", failures);
     return failures ? 1 : 0;
 }

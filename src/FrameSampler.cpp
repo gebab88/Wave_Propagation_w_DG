@@ -4,6 +4,16 @@
 
 // Out-of-class definition: required in C++14 when the member is odr-used.
 constexpr double FrameSampler::kMaxFrames;
+constexpr double FrameSampler::kMaxRamFraction;
+constexpr double FrameSampler::kFallbackMaxBytes;
+
+double FrameSampler::bufferBytes(double frames, double valuesPerFrame) {
+    return frames * (valuesPerFrame + 1.0) * 8.0;
+}
+
+double FrameSampler::maxBufferBytes(double ramBytes) {
+    return ramBytes > 0 ? kMaxRamFraction * ramBytes : kFallbackMaxBytes;
+}
 
 double FrameSampler::frameCount(double t0, double t1, double interval) {
     return std::floor((t1 - t0) / interval + 1e-9) + 1.0;
