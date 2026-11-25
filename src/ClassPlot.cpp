@@ -10,6 +10,8 @@
 #include <thread>
 #include <vector>
 
+constexpr int ClassPlot::kFps;
+
 ClassPlot::ClassPlot(const mat &pressure, const vec &TimeSteps, const vec &xnodes,
                      double x0, double x1)
     : pressure(pressure), TimeSteps(TimeSteps), xnodes(xnodes), x0(x0), x1(x1)
@@ -34,7 +36,7 @@ bool ClassPlot::RenderVideo(const std::string &filename)
         return false;
     }
 
-    std::cout << "Rendering " << nframes << " frames at 60 fps" << std::endl;
+    std::cout << "Rendering " << nframes << " frames at " << kFps << " fps" << std::endl;
 
     const std::size_t npts = xnodes.size();
     std::vector<double> xs(xnodes.memptr(), xnodes.memptr() + npts);
@@ -50,7 +52,7 @@ bool ClassPlot::RenderVideo(const std::string &filename)
         "ffmpeg -y -loglevel error -f rawvideo -pix_fmt rgb24 -s "
         + std::to_string(FrameRenderer::kWidth) + "x"
         + std::to_string(FrameRenderer::kHeight) + " "
-        "-framerate 60 -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p "
+        "-framerate " + std::to_string(kFps) + " -i - -c:v libx264 -preset veryfast -pix_fmt yuv420p "
         + shellQuote(filename);
     std::fflush(stdout);
     FILE *pipe = openWritePipe(cmd);

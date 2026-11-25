@@ -57,43 +57,121 @@ test_ffmpeg_failure_reported() {
     pass "$name"
 }
 
-test_memory_bounded() {
-    local name="${FUNCNAME[0]}" d="$work_dir/mem"
+# set_key <in> <out> <key> <value>: copies a config, replacing the line of
+# <key> or appending it when the config has none (portable: no sed -i).
+set_key() {
+    local in="$1" out="$2" key="$3" value="$4"
+    if grep -q "^ *${key}:" "$in"; then
+        sed "s|^ *${key}:.*|${key}: ${value}|" "$in" >"$out"
+    else
+        { cat "$in"; echo "${key}: ${value}"; } >"$out"
+    fi
+}
+
+# max_rss <dir> <cfg>: runs the solver in <dir> and sets rc and rss (bytes).
+# Sets skip to a reason when time(1) cannot measure here.
+max_rss() {
+    local d="$1" cfg="$2" time_opt
+    skip=""; rss=""; rc=0
     if [[ "$is_windows" == 1 ]]; then
-        echo "SKIP $name (time(1) cannot measure native Windows processes)"; return
+        skip="time(1) cannot measure native Windows processes"; return
     fi
     # Peak memory from time(1): BSD time -l reports bytes, GNU time -v kilobytes.
-    local time_opt
     case "$(uname -s)" in
         Darwin) time_opt=-l ;;
         Linux)  time_opt=-v ;;
-        *)      echo "SKIP $name (no known time(1) for $(uname -s))"; return ;;
+        *)      skip="no known time(1) for $(uname -s)"; return ;;
     esac
-    if [[ ! -x /usr/bin/time ]]; then echo "SKIP $name (/usr/bin/time not installed)"; return; fi
-    mkdir -p "$d"; cd "$d"
+    if [[ ! -x /usr/bin/time ]]; then skip="/usr/bin/time not installed"; return; fi
+    mkdir -p "$d"
     local log="$d/time.log"
-    local cfg="$d/config.yaml"
-    sed 's/^\( *EnablePlotting:\).*/\1 true/' "$DEFAULT_CFG" >"$cfg"
-    local rc=0
-    /usr/bin/time "$time_opt" "$BIN" "$cfg" </dev/null >"$d/out.log" 2>"$log" || rc=$?
-    cd "$work_dir"
-    if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
-    if ! grep -q 'Video written to' "$d/out.log"; then fail "$name" "no 'Video written to' in output"; return; fi
-    local rss
+    ( cd "$d" && /usr/bin/time "$time_opt" "$BIN" "$cfg" </dev/null >"$d/out.log" 2>"$log" ) || rc=$?
     if [[ "$time_opt" == -l ]]; then
         rss="$(sed -n 's/^ *\([0-9][0-9]*\)  *maximum resident set size.*/\1/p' "$log" | head -n1)"
     else
         rss="$(sed -n 's/^.*Maximum resident set size (kbytes): *\([0-9][0-9]*\).*/\1/p' "$log" | head -n1)"
         [[ -z "$rss" ]] || rss=$((rss * 1024))
     fi
+}
+
+test_memory_bounded() {
+    local name="${FUNCNAME[0]}" d="$work_dir/mem"
+    mkdir -p "$d"
+    local cfg="$d/config.yaml"
+    sed 's/^\( *EnablePlotting:\).*/\1 true/' "$DEFAULT_CFG" >"$d/plot.yaml"
+    set_key "$d/plot.yaml" "$cfg" VideoTimePerSecond 1.0e-4   # about 12000 frames
+    max_rss "$d" "$cfg"
+    if [[ -n "$skip" ]]; then echo "SKIP $name ($skip)"; return; fi
+    if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
+    if ! grep -q 'Video written to' "$d/out.log"; then fail "$name" "no 'Video written to' in output"; return; fi
     if [[ -z "$rss" ]]; then fail "$name" "no max RSS in time output"; return; fi
     if (( rss < 1073741824 )); then pass "$name (max RSS $rss bytes)"
     else fail "$name" "max RSS $rss bytes >= 1 GiB"; fi
 }
 
+# Without plotting nothing is stored per step: a long run stays small.
+test_memory_without_plotting() {
+    local name="${FUNCNAME[0]}" d="$work_dir/memnp"
+    mkdir -p "$d"
+    sed -e 's/^\( *EnablePlotting:\).*/\1 false/' -e 's/^N:.*/N: 400/' \
+        -e 's/^order:.*/order: 3/' -e 's/^t1:.*/t1: 1.0e-2/' "$DEFAULT_CFG" >"$d/config.yaml"
+    max_rss "$d" "$d/config.yaml"
+    if [[ -n "$skip" ]]; then echo "SKIP $name ($skip)"; return; fi
+    if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
+    if ! grep -q 'The calculations are finished!' "$d/out.log"; then fail "$name" "run did not finish"; return; fi
+    if [[ -z "$rss" ]]; then fail "$name" "no max RSS in time output"; return; fi
+    if (( rss < 134217728 )); then pass "$name (max RSS $rss bytes)"
+    else fail "$name" "max RSS $rss bytes >= 128 MiB"; fi
+}
+
+# expect_frames <name> <expected frames> <key> <value> [<key> <value> ...]:
+# renders the smoke config with the given keys set; the announced frame count
+# must be the expected one and the video must hold exactly that many frames.
+expect_frames() {
+    local name="$1" expected="$2"; shift 2
+    local d="$work_dir/$name" cfg="$work_dir/$name.yaml" tmp="$work_dir/$name.tmp"
+    mkdir -p "$d"
+    cp "$SMOKE_CFG" "$cfg"
+    while [[ $# -gt 0 ]]; do
+        set_key "$cfg" "$tmp" "$1" "$2"; mv "$tmp" "$cfg"; shift 2
+    done
+    cd "$d"
+    local rc=0 out; out="$(timeout 120 "$BIN" "$cfg" </dev/null 2>&1 | tr -d '\r')" || rc=$?
+    local n; n="$(sed -n 's/^Rendering \([0-9][0-9]*\) frames at 60 fps$/\1/p' <<<"$out" | head -n1)"
+    local probe=""
+    if [[ -s output.mp4 ]]; then
+        probe="$(ffprobe -v error -count_frames -select_streams v:0 \
+            -show_entries stream=nb_read_frames -of csv=p=0 output.mp4)" || probe="ffprobe failed"
+    fi
+    cd "$work_dir"
+    if [[ "$rc" -ne 0 ]]; then fail "$name" "solver exited with status $rc"; return; fi
+    if [[ "$n" != "$expected" ]]; then fail "$name" "rendering $n frames, expected $expected"; return; fi
+    if [[ "$probe" != "$expected" ]]; then fail "$name" "ffprobe counted '$probe' frames, expected $expected"; return; fi
+    pass "$name"
+}
+
+# 8e-5 s * 60 / 1e-3 s = 4.8, so 5 frames, however fine the grid is.
+test_frame_count_independent_of_grid() {
+    expect_frames "${FUNCNAME[0]}_N4" 5 N 4
+    expect_frames "${FUNCNAME[0]}_N8" 5 N 8
+}
+
+# A frame spacing of 1e-5 / 60 s is far below the solver step (3.75e-5 s).
+test_frames_between_steps() {
+    expect_frames "${FUNCNAME[0]}" 481 VideoTimePerSecond 1.0e-5
+}
+
+test_single_frame_video() {
+    expect_frames "${FUNCNAME[0]}" 1 VideoTimePerSecond 1.0
+}
+
 test_frame_count_matches
 test_ffmpeg_failure_reported
+test_frame_count_independent_of_grid
+test_frames_between_steps
+test_single_frame_video
 test_memory_bounded
+test_memory_without_plotting
 
 if [[ "$failures" -ne 0 ]]; then
     echo "$failures video render test(s) failed."

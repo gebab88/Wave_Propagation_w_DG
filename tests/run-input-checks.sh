@@ -25,6 +25,7 @@ write_cfg() {
     cat >"$file" <<'EOF'
 TimeIntegration: RungeKuttaClassic
 EnablePlotting: false
+VideoTimePerSecond: 1.0e-3
 OpenMPMinCells: 50
 OpenMPThreads: 2
 OpenMPLargeMinCells: 512
@@ -141,6 +142,17 @@ test_valid_config_accepted
 test_crlf_config_accepted
 test_config_found_next_to_binary
 
+# Without plotting no frames exist, so the frame limit does not apply.
+test_frame_limit_ignored_without_plotting() {
+    local cfg="$work_dir/nolimit.yaml"
+    write_cfg "$cfg" VideoTimePerSecond=1.0e-12
+    run_solver "$cfg" 30
+    [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
+    [[ "$out" == *'The calculations are finished!'* ]] || { fail "${FUNCNAME[0]}" "run did not finish"; return; }
+    pass "${FUNCNAME[0]}"
+}
+test_frame_limit_ignored_without_plotting
+
 # A non-positive time step (and an endless time loop) without these checks:
 expect_rejected test_swapped_domain_rejected        x1 x0=0.5 x1=0.0
 expect_rejected test_empty_domain_rejected          x1 x0=0.5 x1=0.5
@@ -158,6 +170,13 @@ expect_rejected test_infinite_end_time_rejected     t1 t1=.inf
 expect_rejected test_infinite_domain_rejected       x1 x1=.inf
 expect_rejected test_nan_cfl_rejected               CFLReserve CFLReserve=.nan
 expect_rejected test_nan_frequency_rejected         freq_i freq_i=.nan
+# The video sampling interval must be a positive number, and its frame count bounded:
+expect_rejected test_zero_video_time_rejected      VideoTimePerSecond VideoTimePerSecond=0.0
+expect_rejected test_negative_video_time_rejected  VideoTimePerSecond VideoTimePerSecond=-1.0e-3
+expect_rejected test_nan_video_time_rejected       VideoTimePerSecond VideoTimePerSecond=.nan
+expect_rejected test_infinite_video_time_rejected  VideoTimePerSecond VideoTimePerSecond=.inf
+# 8e-5 s at 1e-12 s per video second would need 4.8e9 frames:
+expect_rejected test_too_many_frames_rejected      VideoTimePerSecond EnablePlotting=true VideoTimePerSecond=1.0e-12
 
 # Euler at the default CFLReserve: |p| passes 1e30 within 2 ms but stays finite.
 expect_stopped test_unstable_euler_stopped          TimeIntegration=EulerExplicit

@@ -10,6 +10,8 @@
 #include <chrono>
 #include <stdexcept>
 #include <climits>
+#include <memory>
+#include <iomanip>
 
 #include <csignal>
 #include <cerrno>
@@ -25,6 +27,7 @@
 #include "ClassdXdt.hpp"
 #include "vandermonde.hpp"
 #include "ClassPlot.hpp"
+#include "FrameSampler.hpp"
 
 #ifdef _WIN32
 // After all other headers: the min/max macros would break std::max and Armadillo.
@@ -373,6 +376,20 @@ int main( int argc, char *argv[] ){
     const double height = cfgGet<double>(cfg, "height");
 
     const bool EnablePlotting = cfgGetOr<bool>(cfg, "EnablePlotting", true);
+    const double VideoTimePerSecond = cfgGetOr<double>(cfg, "VideoTimePerSecond", 1.0e-3);
+    requirePositive("VideoTimePerSecond", VideoTimePerSecond);
+    const double frameInterval = VideoTimePerSecond / ClassPlot::kFps;
+    if (EnablePlotting) {
+        const double nFrames = FrameSampler::frameCount(t0, t1, frameInterval);
+        if (nFrames > FrameSampler::kMaxFrames) {
+            cerr << "Config error: VideoTimePerSecond = " << VideoTimePerSecond << " gives "
+                 << std::fixed << std::setprecision(0)   // a whole number, not 4.8e+09
+                 << nFrames << " video frames for t0 .. t1; at most "
+                 << static_cast<long long>(FrameSampler::kMaxFrames)
+                 << " are allowed. Increase VideoTimePerSecond or shorten t1 - t0." << endl;
+            exit(EXIT_FAILURE);
+        }
+    }
     const long long OpenMPMinCells_in = cfgGetOr<long long>(cfg, "OpenMPMinCells", 50);
     if (OpenMPMinCells_in < 0) {
         cerr << "Config error: OpenMPMinCells must be >= 0 (got "
@@ -612,9 +629,7 @@ int main( int argc, char *argv[] ){
     vec X=U0;
   //dXdtObj.FluidMatrix(U0, dXdt0, t1);
     double t= t0;
-    // Integrate. Each step's pressure field is stored as one column of a
-    // preallocated buffer (contiguous in Armadillo's column-major layout);
-    // growing the result with join_vert would copy everything every step.
+    // Integrate.
     using StepFn = void (ClassdXdt::*)(vec &, double &);
     StepFn step = nullptr;
     if      (TimeIntegration=="EulerExplicit")          step = &ClassdXdt::EulerExplicitClassic;
@@ -629,22 +644,16 @@ int main( int argc, char *argv[] ){
     const bool printEachStep = (TimeIntegration=="EulerExplicit");
 
     const uvec pressureDofs = regspace<uvec>(0, 2, X.n_elem - 2);
-    // t advances by deltaT per step (accumulated in floating point), so the
-    // count is only estimated; the buffers grow if it falls short.
-    uword capacity = static_cast<uword>(std::ceil(std::max(0.0, (t1 - t0) / deltaT))) + 2;
-    mat snapshots(pressureDofs.n_elem, capacity);
-    vec TimeSteps(capacity);
-    uword nSnapshots = 0;
-    auto storeSnapshot = [&]() {
-        if (nSnapshots == capacity) {
-            capacity *= 2;
-            snapshots.resize(snapshots.n_rows, capacity);
-            TimeSteps.resize(capacity);
-        }
-        snapshots.col(nSnapshots) = X.elem(pressureDofs);
-        TimeSteps[nSnapshots] = t;
-        ++nSnapshots;
-    };
+    // Only the video needs the pressure, and only at fixed frame times, so
+    // without plotting nothing is kept. With plotting the sampler interpolates
+    // the frames between each step's previous and current pressure.
+    std::unique_ptr<FrameSampler> sampler;
+    vec pPrev, pCur;
+    if (EnablePlotting) {
+        sampler.reset(new FrameSampler(t0, t1, frameInterval, pressureDofs.n_elem));
+        pCur = X.elem(pressureDofs);
+        sampler->start(pCur);
+    }
 
     // The exact pressure never exceeds 2: the unit-amplitude inflow wave plus
     // its reflection at the wall. Up to the integrator's practical limit the
@@ -657,14 +666,15 @@ int main( int argc, char *argv[] ){
     // sources or initial states need a matching limit.
     const double pressureLimit = 4.0;
 
-    storeSnapshot();   // initial state at t0
+    uword nSteps = 0;
     do {
+        const double tPrev = t;
         (dXdtObj.*step)(X, t);
-        storeSnapshot();
+        ++nSteps;
         if (printEachStep) cout << "t=" << t << endl;
         if (!pressureWithin(X, pressureLimit)) {
             const vec p = X.elem(pressureDofs);
-            cerr << "Error: the solution is unstable at t = " << t << " s (step " << nSnapshots - 1 << "): ";
+            cerr << "Error: the solution is unstable at t = " << t << " s (step " << nSteps << "): ";
             if (p.is_finite())
                 cerr << "max |p| = " << abs(p).max();
             else
@@ -674,11 +684,12 @@ int main( int argc, char *argv[] ){
                  << CFLReserve << "); usable values are in docs/zeitintegration.md, section 4.4." << endl;
             return 1;
         }
+        if (sampler) {
+            std::swap(pPrev, pCur);
+            pCur = X.elem(pressureDofs);
+            sampler->advance(tPrev, pPrev, t, pCur);
+        }
     } while (t < t1);
-
-    TimeSteps.resize(nSnapshots);
-    const mat pressureSolution = trans(snapshots.cols(0, nSnapshots - 1));  // rows = time steps
-    snapshots.reset();
 
     //X.save("X.dat",raw_ascii);
     //pressureSolution.print("Pressure solution =");
@@ -703,7 +714,7 @@ int main( int argc, char *argv[] ){
 
     cout << "Plotting starts!" << endl;
 
-    ClassPlot PlotObj(pressureSolution, TimeSteps, xnodes, x0, x1);
+    ClassPlot PlotObj(sampler->frames(), sampler->times(), xnodes, x0, x1);
 
     PlotObj.RenderVideo("output.mp4");
 
