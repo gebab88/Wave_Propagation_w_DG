@@ -144,6 +144,29 @@ test_memory_check_before_grid() {
     else fail "$name" "max RSS $rss bytes >= 128 MiB"; fi
 }
 
+# A buffer that passes the memory check can still fail to allocate (strict
+# overcommit, other processes, address-space limits). A 1 GB virtual memory
+# limit forces that for a 2 GB buffer (about 100 000 frames x 2500 values);
+# the run must end with a message instead of an uncaught std::bad_alloc.
+# Linux only: macOS does not enforce ulimit -v.
+test_buffer_allocation_failure_reported() {
+    local name="${FUNCNAME[0]}" d="$work_dir/allocfail"
+    if [[ "$(uname -s)" != Linux ]]; then
+        echo "SKIP $name (ulimit -v is enforced only on Linux)"; return; fi
+    local ram_kb; ram_kb="$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)"
+    if (( ram_kb < 3500000 )); then
+        echo "SKIP $name (under 3.5 GB RAM the memory check rejects the 2 GB video first)"; return; fi
+    mkdir -p "$d"
+    sed -e 's/^\( *EnablePlotting:\).*/\1 true/' -e 's/^N:.*/N: 500/' "$DEFAULT_CFG" >"$d/plot.yaml"
+    set_key "$d/plot.yaml" "$d/config.yaml" VideoTimePerSecond 1.2e-5
+    local out rc=0
+    out="$(cd "$d" && ulimit -v 1000000 && timeout 60 "$BIN" config.yaml </dev/null 2>&1)" || rc=$?
+    if [[ "$rc" != 1 ]]; then fail "$name" "exit code $rc, expected 1"; return; fi
+    [[ "$out" == *'the video buffer of '*' could not be allocated'* ]] || {
+        fail "$name" "missing 'the video buffer of ... could not be allocated'"; return; }
+    pass "$name"
+}
+
 # expect_frames <name> <expected frames> <key> <value> [<key> <value> ...]:
 # renders the smoke config with the given keys set; the announced frame count
 # must be the expected one and the video must hold exactly that many frames.
@@ -193,6 +216,7 @@ test_single_frame_video
 test_memory_bounded
 test_memory_without_plotting
 test_memory_check_before_grid
+test_buffer_allocation_failure_reported
 
 if [[ "$failures" -ne 0 ]]; then
     echo "$failures video render test(s) failed."

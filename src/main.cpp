@@ -670,7 +670,20 @@ int main( int argc, char *argv[] ){
     std::unique_ptr<FrameSampler> sampler;
     vec pPrev, pCur;
     if (EnablePlotting) {
-        sampler.reset(new FrameSampler(t0, t1, frameInterval, pressureDofs.n_elem));
+        // The memory check above cannot see everything (other processes,
+        // strict overcommit, address-space limits), so a failed allocation
+        // ends with a message instead of an uncaught exception.
+        try {
+            sampler.reset(new FrameSampler(t0, t1, frameInterval, pressureDofs.n_elem));
+        } catch (const std::exception &e) {
+            const double bytes = FrameSampler::bufferBytes(
+                FrameSampler::frameCount(t0, t1, frameInterval), pressureDofs.n_elem);
+            cerr << "Error: the video buffer of " << std::fixed << std::setprecision(1)
+                 << FrameSampler::gbRoundedUp(bytes) << " GB could not be allocated ("
+                 << e.what() << "). Increase VideoTimePerSecond, shorten t1 - t0 or reduce N or order."
+                 << endl;
+            exit(EXIT_FAILURE);
+        }
         pCur = X.elem(pressureDofs);
         sampler->start(pCur);
     }
