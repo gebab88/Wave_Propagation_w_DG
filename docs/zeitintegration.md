@@ -24,11 +24,16 @@ Jedes Verfahren ist eine Methode `void Verfahren(vec &X, double &t)` von `Classd
 ```cpp
 using StepFn = void (ClassdXdt::*)(vec &, double &);
 ...
-storeSnapshot();                 // Zustand bei t0
+if (sampler) sampler->start(pCur);   // Zustand bei t0
 do {
+    const double tPrev = t;
     (dXdtObj.*step)(X, t);
-    storeSnapshot();
     if (!pressureWithin(X, pressureLimit)) { /* Fehlermeldung */ return 1; }
+    if (sampler) {
+        std::swap(pPrev, pCur);
+        pCur = X.elem(pressureDofs);
+        sampler->advance(tPrev, pPrev, t, pCur);   // Frames zwischen tPrev und t
+    }
 } while (t < t1);
 ```
 

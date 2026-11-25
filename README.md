@@ -101,7 +101,7 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
 
-Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl. `test_ctrl_z_uses_config` wird unter macOS und Linux immer übersprungen, weil Strg+Z dort den Job anhält. Ebenso `test_ctrl_c_ends_windows_menu`: Es prüft Strg+C unter Windows, unter macOS und Linux tut das `test_ctrl_c_restores_terminal`. Unter Windows laufen die Menü-Tests über `tests/conpty_run.cpp` (ConPTY) statt über `script`; dort entfallen `test_memory_bounded`, `test_ctrl_c_restores_terminal`, `test_ignored_sigint_stays_ignored` und `test_background_job_skips_menu`, weil sie POSIX-Verhalten oder `time(1)` voraussetzen.
+Die Skripte bauen `bin/Release` selbst. Den Speicherbedarf misst `/usr/bin/time`; unter Linux kommt es aus dem Paket `time`. Die meisten Menü-Tests brauchen ein Pseudo-Terminal von `script`. Bekommen sie keines, werden diese 16 Tests übersprungen; in der CI (Variable `CI` gesetzt) schlagen sie dann fehl. `test_ctrl_z_uses_config` wird unter macOS und Linux immer übersprungen, weil Strg+Z dort den Job anhält. Ebenso `test_ctrl_c_ends_windows_menu`: Es prüft Strg+C unter Windows, unter macOS und Linux tut das `test_ctrl_c_restores_terminal`. Unter Windows laufen die Menü-Tests über `tests/conpty_run.cpp` (ConPTY) statt über `script`; dort entfallen `test_memory_bounded`, `test_memory_without_plotting`, `test_ctrl_c_restores_terminal`, `test_ignored_sigint_stays_ignored` und `test_background_job_skips_menu`, weil sie POSIX-Verhalten oder `time(1)` voraussetzen.
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) baut bei jedem Push und Pull Request `Release` und `Debug` und führt `make test` aus: unter Ubuntu 24.04 auf x86_64 und auf arm64 sowie unter Windows 11 mit MSYS2 auf x64 (`windows-2025`, UCRT64) und auf ARM64 (`windows-11-arm`, CLANGARM64). Die Windows-Jobs starten das fertige Programm außerdem aus PowerShell, also außerhalb von MSYS2.
 
@@ -179,7 +179,7 @@ bin/Release/DiscontinousGalerkin.exe
 - **ffmpeg** muss im `PATH` liegen. Es kann aus MSYS2 stammen (siehe oben) oder aus einer anderen Quelle. Das Programm startet es über `cmd.exe`. Fehlt es, erscheint `Video encoding failed …`, und die Rechnung läuft trotzdem durch.
 - **Integrator-Menü:** Es erscheint, wenn stdin eine Windows-Konsole ist, also in Windows Terminal, PowerShell und cmd. Taste `1`–`5` wählt ein Verfahren, Enter oder Strg+Z übernimmt den Wert aus der Config, Strg+C beendet das Programm. Kommt die Eingabe aus einer Pipe oder von `NUL`, wird das Menü übersprungen und der Config-Wert gilt, angezeigt durch die Zeile `Using: …`.
 - **mintty** (das Standardfenster der MSYS2-Shells): Ob das Menü dort erscheint, ist nicht geprüft, denn die CI hat keine mintty-Sitzung. Erscheint es nicht, gilt der Config-Wert; das Menü bekommt man dann sicher in Windows Terminal, PowerShell oder cmd.
-- **Tests:** `make test` läuft wie unter Linux. Die Menü-Tests nutzen ConPTY, der Speichertest entfällt (siehe [Tests](#tests)).
+- **Tests:** `make test` läuft wie unter Linux. Die Menü-Tests nutzen ConPTY, die Speichertests entfallen (siehe [Tests](#tests)).
 
 ---
 
@@ -231,7 +231,7 @@ Dadurch ist `CFLReserve` für alle Ordnungen ungefähr gleich „sicher" (die pr
 
 Verfügbare Werte für `TimeIntegration`: `EulerExplicit`, `RungeKuttaClassic`, `RungeKuttaSecond`, `RungeKuttaSecondOrder`, `PredictorCorrectorHeun`.
 
-Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch vor dem Menü: `CFLReserve`, `c_0` und `rho_0` müssen positiv sein, `x1` größer als `x0` und `t1` größer als `t0`. Diese Werte und `freq_i` dürfen außerdem nicht `.nan` oder `.inf` sein. Während der Rechnung prüft das Programm nach jedem Schritt den Druck. Ist er nicht mehr endlich oder betragsmäßig größer als 4, das Doppelte des exakten Maximums, bricht es mit einer Meldung und Status 1 ab, ohne Video. Das passiert, wenn `CFLReserve` für das gewählte Verfahren zu groß ist, beim Euler-Verfahren etwa schon mit dem Standardwert.
+Unsinnige Werte weist das Programm beim Start mit `Config error: …` ab, noch vor dem Menü: `CFLReserve`, `c_0` und `rho_0` müssen positiv sein, `x1` größer als `x0` und `t1` größer als `t0`. `VideoTimePerSecond` muss positiv und endlich sein; mit Plot sind höchstens 1 000 000 Frames erlaubt. Diese Werte und `freq_i` dürfen außerdem nicht `.nan` oder `.inf` sein. Während der Rechnung prüft das Programm nach jedem Schritt den Druck. Ist er nicht mehr endlich oder betragsmäßig größer als 4, das Doppelte des exakten Maximums, bricht es mit einer Meldung und Status 1 ab, ohne Video. Das passiert, wenn `CFLReserve` für das gewählte Verfahren zu groß ist, beim Euler-Verfahren etwa schon mit dem Standardwert.
 
 ---
 
