@@ -148,11 +148,14 @@ test_memory_check_before_grid() {
 # overcommit, other processes, address-space limits). A 1 GB virtual memory
 # limit forces that for a 2 GB buffer (about 100 000 frames x 2500 values);
 # the run must end with a message instead of an uncaught std::bad_alloc.
-# Linux only: macOS does not enforce ulimit -v.
+# Linux only: macOS does not enforce ulimit -v, and under QEMU user emulation
+# (x64 images on Apple Silicon) the limit is accepted but never applied.
 test_buffer_allocation_failure_reported() {
     local name="${FUNCNAME[0]}" d="$work_dir/allocfail"
     if [[ "$(uname -s)" != Linux ]]; then
         echo "SKIP $name (ulimit -v is enforced only on Linux)"; return; fi
+    if [[ "$(ulimit -v 1000000 && ulimit -v)" != 1000000 ]]; then
+        echo "SKIP $name (ulimit -v has no effect here, e.g. under QEMU)"; return; fi
     local ram_kb; ram_kb="$(sed -n 's/^MemTotal: *\([0-9]*\) kB/\1/p' /proc/meminfo)"
     if (( ram_kb < 3500000 )); then
         echo "SKIP $name (under 3.5 GB RAM the memory check rejects the 2 GB video first)"; return; fi

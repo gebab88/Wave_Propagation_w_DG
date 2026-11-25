@@ -150,6 +150,9 @@ Mit Ubuntu 26.04 überspringt `make test` im per QEMU emulierten x64-Image die
 16 Menü-Tests, die ein Terminal brauchen. glibc 2.43 fragt das Terminal über das
 ioctl `TCGETS2` ab, und das kennt QEMU 7.0 nicht. Dort sieht also kein Programm
 ein Terminal. Nativ unter arm64 laufen mit 26.04 alle Tests.
+Unter QEMU wirkt außerdem `ulimit -v` nicht: QEMU nimmt das Limit an, setzt es
+aber nicht um. `test_buffer_allocation_failure_reported` wird im x64-Image
+deshalb übersprungen.
 Die CI testet beide Architekturen nativ ([Tests](#tests)).
 
 ---

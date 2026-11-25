@@ -2,6 +2,10 @@
 # for the "Press enter to exit." test. Run it in a scratch directory.
 TimeIntegration: PredictorCorrectorHeun
 EnablePlotting: true
+# 1601 frames, one per solver step as before VideoTimePerSecond existed; with
+# the default 1.0e-3 it would be 12001, and x64 under QEMU would need about
+# 160 s to draw them instead of about 22 s.
+VideoTimePerSecond: 7.5e-3
 OpenMPMinCells: 50
 OpenMPThreads: 2
 OpenMPLargeMinCells: 512
