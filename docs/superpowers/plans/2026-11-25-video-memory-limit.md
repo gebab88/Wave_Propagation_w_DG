@@ -59,7 +59,7 @@
 
 - [ ] **Step 1: Tests schreiben** in `tests/test_frame_sampler.cpp` (bestehender Stil; für große Werte relative Toleranz `fabs(a - b) <= 1e-12 * fabs(b)`), `#include "SystemMemory.hpp"`:
   - `test_buffer_bytes`:
-    - `bufferBytes(1201, 250) == 2412008` (Standard-Config: 2,4 MB)
+    - `bufferBytes(1201, 250) == 2411608` (Standard-Config: 2,4 MB)
     - `bufferBytes(480001, 800000)` ≈ `480001.0 * 800001.0 * 8.0` (≈ 3,07e12)
     - `bufferBytes(1e6, 1e9)` endlich und > 8e15
   - `test_max_buffer_bytes`: `maxBufferBytes(8e9)` ≈ `4.8e9`; `maxBufferBytes(0) == 4.0e9`; `maxBufferBytes(-1) == 4.0e9`.

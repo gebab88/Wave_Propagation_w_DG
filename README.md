@@ -97,7 +97,7 @@ Release und Debug bauen in getrennte Objektverzeichnisse (`obj/Release`, `obj/De
 |---|---|---|
 | `make test-render` | `tests/test_frame_renderer.cpp` | Frame-Renderer (C++-Unit-Tests) |
 | `make test-pipe` | `tests/test_video_pipe.cpp` | Pipe zu ffmpeg: Bytes kommen unverändert an, Exit-Status (C++-Unit-Tests) |
-| `make test-sampler` | `tests/test_frame_sampler.cpp` | Frame-Sampler: Zeitpunkte, Interpolation, Grenzfälle (C++-Unit-Tests) |
+| `make test-sampler` | `tests/test_frame_sampler.cpp` | Frame-Sampler: Zeitpunkte, Interpolation, Grenzfälle, Speicherbedarf, RAM-Abfrage (C++-Unit-Tests) |
 | `make test-input-checks` | `tests/run-input-checks.sh` | Eingabeprüfung und Abbruch instabiler Rechnungen |
 | `make test-menu` | `tests/run-integrator-menu.sh` | Integrator-Menü im Pseudo-Terminal |
 | `make test-video` | `tests/run-video-render.sh` | Video-Ausgabe, ffmpeg-Fehler, Speicherbedarf |
