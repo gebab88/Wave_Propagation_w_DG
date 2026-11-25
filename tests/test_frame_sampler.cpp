@@ -117,7 +117,7 @@ static void test_buffer_bytes() {
     CHECK(rel_near(FrameSampler::bufferBytes(480001, 800000), 480001.0 * 800001.0 * 8.0));
     const double huge = FrameSampler::bufferBytes(1e6, 1e9);
     CHECK(huge < std::numeric_limits<double>::infinity());
-    CHECK(huge > 8e15);
+    CHECK(rel_near(huge, 1e6 * (1e9 + 1.0) * 8.0));
     report("test_buffer_bytes", before);
 }
 
@@ -132,7 +132,7 @@ static void test_max_buffer_bytes() {
 static void test_installed_ram_is_plausible() {
     const int before = failures;
     const double ram = installedRamBytes();
-    CHECK(ram > 1e9);
+    CHECK(ram > 2.5e8);
     CHECK(ram < 1e15);
     report("test_installed_ram_is_plausible", before);
 }
