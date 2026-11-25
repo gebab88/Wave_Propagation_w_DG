@@ -20,6 +20,8 @@ public:
 
     // Fills every frame k with tPrev < t_k <= t by linear interpolation
     // between prev (at tPrev) and cur (at t); frames already filled stay.
+    // Call contract: tPrev is the t of the previous call (t0 after start())
+    // and t > tPrev.
     void advance(double tPrev, const arma::vec &prev, double t, const arma::vec &cur);
 
     arma::uword filled() const { return filled_; }       // frames filled so far

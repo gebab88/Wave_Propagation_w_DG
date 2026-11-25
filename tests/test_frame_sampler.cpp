@@ -61,15 +61,27 @@ static void test_solver_like_loop_fills_all_frames() {
     const int before = failures;
     FrameSampler s(0, 1.0, 0.25, 1);
     double t = 0.0, tPrev = 0.0;
-    s.start(arma::vec{t});
+    s.start(arma::vec{t * t});
     do {
         tPrev = t;
         t += 0.1;
-        s.advance(tPrev, arma::vec{tPrev}, t, arma::vec{t});
+        s.advance(tPrev, arma::vec{tPrev * tPrev}, t, arma::vec{t * t});
+        // A frame is filled exactly when its step reaches it.
+        arma::uword expected = 0;
+        for (arma::uword k = 0; k < s.times().n_elem; ++k)
+            if (s.times()(k) <= t) ++expected;
+        CHECK(s.filled() == expected);
+        // The value is the linear interpolation between the bracketing steps
+        // (t*t is not linear, so a wrong pair of steps gives another value).
+        for (arma::uword k = 0; k < s.filled(); ++k) {
+            const double tk = s.times()(k);
+            if (tk > tPrev && tk <= t) {
+                const double want = tPrev * tPrev + (tk - tPrev) / (t - tPrev) * (t * t - tPrev * tPrev);
+                CHECK(near(s.frames()(k, 0), want));
+            }
+        }
     } while (t < 1.0);
     CHECK(s.filled() == 5);
-    for (arma::uword k = 0; k < 5 && k < s.frames().n_rows; ++k)
-        CHECK(near(s.frames()(k, 0), s.times()(k)));
     report("test_solver_like_loop_fills_all_frames", before);
 }
 

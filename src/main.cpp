@@ -692,9 +692,6 @@ int main( int argc, char *argv[] ){
     } while (t < t1);
 
     //X.save("X.dat",raw_ascii);
-    //pressureSolution.print("Pressure solution =");
-    //pressureSolution.save("X.dat",raw_ascii);
-    //TimeSteps.save("time.dat",raw_ascii);
 
     EndTimeCalc = chrono::system_clock::now();
 
