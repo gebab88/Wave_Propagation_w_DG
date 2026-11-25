@@ -4,6 +4,15 @@
 # The Windows jobs build natively in MSYS2 (UCRT64/GCC on x64, CLANGARM64/clang
 # on arm64) with the Makefile; there is no local Windows machine, so CI is the
 # only place where the Windows port is verified.
+#
+# Build and tests run in separate jobs. A build job packs bin/Release,
+# bin/Debug and obj into a tar file (tar keeps the executable bits) and uploads
+# it as an artifact; the test job of the same platform unpacks it after the
+# checkout. `tar -m` gives the files the unpack time, so they are newer than
+# the checked-out sources and make only relinks instead of compiling again.
+# A test job needs all build jobs of its OS to finish, but it runs even if one
+# of them failed, so a broken build on one architecture does not skip the
+# tests of the other. Its download step then fails at once.
 name: CI
 
 on:
@@ -15,11 +24,11 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    name: ${{ matrix.runner }} ${{ matrix.arch }}
+  linux-build:
+    name: build ${{ matrix.runner }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
-    strategy:
+    strategy: &linux-strategy
       fail-fast: false
       matrix:
         include:
@@ -30,7 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install dependencies
+      - &linux-dependencies
+        name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -40,36 +50,97 @@ jobs:
       - name: Build Release and Debug
         run: make Release Debug
 
+      - name: Pack the build
+        run: tar -cf build.tar bin/Release bin/Debug obj
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.runner }}-${{ matrix.arch }}
+          path: build.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  linux-test:
+    name: test ${{ matrix.runner }} ${{ matrix.arch }}
+    needs: linux-build
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy: *linux-strategy
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: build-${{ matrix.runner }}-${{ matrix.arch }}
+
+      - *linux-dependencies
+
+      - &unpack
+        name: Unpack the build
+        id: unpack
+        run: |
+          tar -xmf build.tar
+          # The tests must use the build job's objects, not compile new ones.
+          if make -n Release Debug | grep -- ' -c '; then
+            echo "::error::make would compile again although the build was unpacked"
+            exit 1
+          fi
+
       - name: Run all tests
         run: make test
 
-  windows:
-    name: ${{ matrix.runner }} ${{ matrix.arch }}
+  windows-build:
+    name: build ${{ matrix.runner }} ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
-    strategy:
+    strategy: &windows-strategy
       fail-fast: false
       matrix:
         include:
           - { runner: windows-2025,   arch: x64,   msystem: UCRT64,     prefix: ucrt64,     compiler: "gcc:p" }
           - { runner: windows-11-arm, arch: arm64, msystem: CLANGARM64, prefix: clangarm64, compiler: "clang:p llvm-openmp:p" }
-    defaults:
+    defaults: &windows-defaults
       run:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v7
-      - uses: msys2/setup-msys2@v2
+      - &setup-msys2
+        uses: msys2/setup-msys2@v2
         id: msys2
         with:
           msystem: ${{ matrix.msystem }}
           update: true
-          install: make
+          install: make tar
           pacboy: ${{ matrix.compiler }} armadillo:p openblas:p yaml-cpp:p ffmpeg:p
       - name: Show environment
         run: uname -s; uname -m; echo "MSYSTEM=$MSYSTEM"; (g++ --version || clang++ --version) | head -1
       - name: Release and Debug build
-        id: build
         run: make Release Debug
+      - name: Pack the build
+        run: tar -cf build.tar bin/Release bin/Debug obj
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.runner }}-${{ matrix.arch }}
+          path: build.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  windows-test:
+    name: test ${{ matrix.runner }} ${{ matrix.arch }}
+    needs: windows-build
+    if: ${{ !cancelled() }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy: *windows-strategy
+    defaults: *windows-defaults
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: build-${{ matrix.runner }}-${{ matrix.arch }}
+      - *setup-msys2
+      - *unpack
       - name: Run all tests
         run: make test
         env:
@@ -83,8 +154,8 @@ jobs:
           CONPTY_RUN_RAW: ${{ runner.temp }}/conpty-raw.log
       - name: Start the solver from PowerShell
         # Outside MSYS2: the program must find ffmpeg and its DLLs through PATH alone.
-        # Needs only the build, so it runs even if a test failed.
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        # Needs only the unpacked build, so it runs even if a test failed.
+        if: ${{ !cancelled() && steps.unpack.outcome == 'success' }}
         shell: pwsh
         timeout-minutes: 5
         run: |
@@ -104,7 +175,7 @@ jobs:
         # argv[0] uses backslashes here. The config, written for this step only,
         # turns plotting off, so "Plotting disabled by config." shows that it
         # was read.
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.unpack.outcome == 'success' }}
         shell: pwsh
         timeout-minutes: 5
         run: |
