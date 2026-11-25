@@ -210,7 +210,7 @@ Alle Parameter werden zur Laufzeit aus `config.yaml` gelesen — Änderungen wir
 | `N` | `50` | Anzahl Zellen |
 | `x0, x1` | `0.0, 0.5` | Gebiet [m] |
 | `t0, t1` | `0.0, 2e-2` | Zeitintervall [s] |
-| `CFLReserve` | `0.45` | ordnungsunabhängige Sicherheitsfraktion des CFL-Limits |
+| `CFLReserve` | `0.45` | Sicherheitsfraktion des CFL-Limits; 0.45 reicht mit RK4 bis Ordnung 15, Ordnung 20 braucht höchstens 0.37 ([Grenzen](docs/zeitintegration.md#44-praktische-grenzen-anwachsen-am-einströmrand)) |
 | `EnablePlotting` | `true` | `false` für reine Rechen-Benchmarks ohne MP4-Ausgabe |
 | `VideoTimePerSecond` | `1e-3` | Simulationszeit pro Video-Sekunde [s]; Frames alle `VideoTimePerSecond/60` s, linear zwischen den Rechenschritten interpoliert |
 | `OpenMPMinCells` | `50` | Zellzahl, ab der die OpenMP-Zellschleife mit `OpenMPThreads` aktiv wird (`0` erzwingt OpenMP) |

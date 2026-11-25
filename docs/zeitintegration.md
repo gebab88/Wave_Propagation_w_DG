@@ -240,6 +240,13 @@ Die praktische Grenze wurde deshalb mit echten Rechnungen bestimmt: das größte
 | 3 | 0,020 | 0,86 | 1,20 | 1,21 |
 | 5 | 0,035 | 0,66 | 0,92 | 0,92 |
 | 8 | 0,018 | 0,49 | 0,69 | 0,69 |
+| 10 | – | 0,43 | 0,60 | – |
+| 12 | – | – | 0,53 | – |
+| 15 | – | – | 0,46 | – |
+| 16 | – | – | 0,44 | – |
+| 20 | – | 0,27 | 0,37 | 0,37 |
+
+Die Ordnungen 10 bis 20 sind am 25.11.2026 mit demselben Verfahren nachgemessen, „–“ heißt nicht gemessen. Als Kontrolle ergab Ordnung 8 mit RK4 erneut 0,69. Bei Ordnung 20 hängt die Grenze kaum vom Gitter ab: mit $N = 100$ ebenfalls 0,37.
 
 | $N$, $n = 5$ | Euler | Heun | RK4 |
 |---|---|---|---|
@@ -252,15 +259,15 @@ Die praktische Grenze wurde deshalb mit echten Rechnungen bestimmt: das größte
 - Ordnung 1 bestätigt das Vorgehen: Dort ist das Verfahren das Upwind-Finite-Volumen-Verfahren, für das mit Euler die bekannte CFL-Bedingung $c_0\,\Delta t/\Delta x \le 1$ gilt, also `CFLReserve` ≤ 1. Gemessen: 1,00. Die Eigenwerte allein ließen 1,17 zu.
 - Beim Prädiktor-Korrektor begrenzt nicht der Druck, sondern die Iteration: Mit 0,65 läuft er über 20 ms ($\max|p| = 2{,}00$), mit 0,70 hängt schon der erste Schritt ([Abschnitt 3.5](#35-prädiktor-korrektor-nach-heun-predictorcorrectorheun)). Mit dem Standardwert ist $\max|p| = 2{,}0013$.
 
-**Prüfung im Programm.** Nach jedem Schritt prüft `main()`, ob der Druck an allen Knoten endlich ist und betragsmäßig höchstens 4 beträgt, das Doppelte des exakten Maximums. Andernfalls bricht das Programm mit einer Meldung und Status 1 ab, ohne Video. Bis zur praktischen Grenze bleibt $\max|p|$ nach deren Definition bei höchstens 2,1. Mit dem Standardwert 0,45 blieb es in allen geprüften Fällen unter 2,005: RK4 mit allen Ordnungen von 1 bis 8, mit $N$ von 10 bis 400 und mit Frequenzen von 0,3 bis 20 kHz, außerdem die 3/8-Regel, Heun und der Prädiktor-Korrektor. Euler mit dem Standardwert 0,45 endet so nach 86 Schritten (0,14 ms), RK4 mit 0,95 nach 40 Schritten. Zwei Fälle erkennt die Prüfung nicht:
+**Prüfung im Programm.** Nach jedem Schritt prüft `main()`, ob der Druck an allen Knoten endlich ist und betragsmäßig höchstens 4 beträgt, das Doppelte des exakten Maximums. Andernfalls bricht das Programm mit einer Meldung und Status 1 ab, ohne Video. Bis zur praktischen Grenze bleibt $\max|p|$ nach deren Definition bei höchstens 2,1. Mit dem Standardwert 0,45 blieb es in allen geprüften Fällen unter 2,005: RK4 mit allen Ordnungen von 1 bis 15, mit $N$ von 10 bis 400 und mit Frequenzen von 0,3 bis 20 kHz, außerdem die 3/8-Regel bis Ordnung 15, Heun bis Ordnung 9 und der Prädiktor-Korrektor. Euler mit dem Standardwert 0,45 endet so nach 86 Schritten (0,14 ms), RK4 mit 0,95 nach 40 Schritten. Darüber liegt 0,45 über der praktischen Grenze, und die Prüfung bricht ab: RK4 mit Ordnung 16 nach 56 Schritten, mit Ordnung 20 schon nach 12, Heun mit Ordnung 10 nach 82. Zwei Fälle erkennt die Prüfung nicht:
 
-- Knapp über der praktischen Grenze bleibt $\max|p|$ unter 4: Euler erreicht mit 0,04 über 20 ms 2,35 und mit 0,045 schon 3,42, also 17 bzw. 71 % zu viel.
+- Knapp über der praktischen Grenze bleibt $\max|p|$ unter 4: Euler erreicht mit 0,04 über 20 ms 2,35 und mit 0,045 schon 3,42, also 17 bzw. 71 % zu viel. RK4 mit Ordnung 16 erreicht mit 0,443 den Wert 2,97, also 49 % zu viel.
 - Hängt die Iteration des Prädiktor-Korrektors ([Abschnitt 3.5](#35-prädiktor-korrektor-nach-heun-predictorcorrectorheun)), kommt die Prüfung nie an die Reihe, weil der Schritt nicht endet.
 
 ### 4.5 Folgerungen
 
-- Mit dem Standardwert 0,45 bleiben Heun, RK4 und die 3/8-Regel bei allen geprüften Ordnungen und Gittern unter der praktischen Grenze, der Prädiktor-Korrektor unter seiner Konvergenzgrenze; seine Iteration hängt aber schon knapp darunter (bei $n = 5$, $N = 50$ ab 0,70). RK4 hat mindestens den Faktor 1,5 Reserve (Ordnung 8: 0,69), Heun bei Ordnung 8 nur noch den Faktor 1,1 (0,49).
-- Der Faktor $1/(2n-1)$ in der Schrittweitenformel gleicht das Wachstum des Spektralradius mit der Ordnung nicht vollständig aus ($\rho\,\Delta t_1$ steigt von 1,69 auf 3,66). `CFLReserve` ist also nur ungefähr ordnungsunabhängig: Die praktische RK4-Grenze fällt von 1,43 ($n = 1, 2$) auf 0,69 ($n = 8$).
+- Mit dem Standardwert 0,45 bleiben RK4 und die 3/8-Regel bis Ordnung 15 und Heun bis Ordnung 9 unter der praktischen Grenze, der Prädiktor-Korrektor unter seiner Konvergenzgrenze; seine Iteration hängt aber schon knapp darunter (bei $n = 5$, $N = 50$ ab 0,70). Bis Ordnung 8 hat RK4 mindestens den Faktor 1,5 Reserve (0,69), Heun bei Ordnung 8 nur noch den Faktor 1,1 (0,49). Ab Ordnung 16 (RK4, 3/8-Regel) bzw. 10 (Heun) muss `CFLReserve` kleiner sein, bei Ordnung 20 höchstens 0,37 bzw. 0,27.
+- Der Faktor $1/(2n-1)$ in der Schrittweitenformel gleicht das Wachstum des Spektralradius mit der Ordnung nicht vollständig aus ($\rho\,\Delta t_1$ steigt von 1,69 auf 3,66). `CFLReserve` ist also nur ungefähr ordnungsunabhängig: Die praktische RK4-Grenze fällt von 1,43 ($n = 1, 2$) über 0,69 ($n = 8$) auf 0,37 ($n = 20$).
 - Beim Euler-Verfahren gibt es keinen festen Wert, der überall passt. Die Eigenwertgrenze fällt mit feinerem Gitter weiter, die praktische liegt für $n \ge 2$ zwischen 0,018 und 0,047.
 - Maßgeblich sind die praktischen Grenzen. Die Eigenwertgrenzen sind nur eine notwendige Bedingung. Die praktischen liegen 5 bis 20 % darunter, beim Euler-Verfahren für $n \ge 2$ um den Faktor 4 bis 20.
 
@@ -284,7 +291,7 @@ Mit dem Standardwert 0,45 hat RK4 einen Zeitfehler von $6{,}7\cdot 10^{-5}$. Der
 
 ## 6 Empfehlung
 
-- **RK4 (`RungeKuttaClassic`)** für alle normalen Rechnungen. Bei gleichem Aufwand ist es um Größenordnungen genauer als Heun, und 0,45 liegt rund den Faktor 2 unter seiner praktischen Grenze.
+- **RK4 (`RungeKuttaClassic`)** für alle normalen Rechnungen. Bei gleichem Aufwand ist es um Größenordnungen genauer als Heun, und 0,45 liegt bei Ordnung 5 rund den Faktor 2 unter seiner praktischen Grenze. Ab Ordnung 16 muss `CFLReserve` kleiner sein, bei Ordnung 20 höchstens 0,37 ([Abschnitt 4.4](#44-praktische-grenzen-anwachsen-am-einströmrand)).
 - **Heun (`RungeKuttaSecondOrder`)** für schnelle Voransichten, wenn nur das qualitative Bild zählt: halbe Rechenzeit, aber ein mehrere hundertmal größerer Fehler.
 - **3/8-Regel (`RungeKuttaSecond`)** bringt hier gegenüber RK4 nichts.
 - **Euler (`EulerExplicit`)** nur zur Demonstration, mit deutlich kleinerem `CFLReserve` (Standardgitter: höchstens etwa 0,035).

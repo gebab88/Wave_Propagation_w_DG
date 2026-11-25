@@ -32,8 +32,10 @@ OpenMPThreads: 2
 OpenMPLargeMinCells: 512
 OpenMPLargeThreads: 4
 
-# Order-independent safety fraction of the CFL limit (the order-dependent
-# 1/(2*order-1) factor is applied in code). 0.45 is stable across orders.
+# Safety fraction of the CFL limit (the order-dependent 1/(2*order-1) factor
+# is applied in code). 0.45 is stable for RK4 and the 3/8 rule up to order 15
+# and for Heun up to order 9; order 20 needs at most 0.37 (RK4, 3/8 rule) or
+# 0.27 (Heun). Measured limits: docs/zeitintegration.md, section 4.4.
 CFLReserve: 0.45
 
 N: 50          # number of cells
