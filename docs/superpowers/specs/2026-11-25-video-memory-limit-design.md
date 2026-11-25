@@ -81,18 +81,38 @@ Absturz beim Anlegen des Puffers durch eine klare Meldung ersetzen.
     (Frames × (N·order + 1) × 8 Byte).
   - Angabe in GB (10⁹ Byte) mit einer Nachkommastelle.
   - Reihenfolge: erst das Frame-Limit, dann der Speicherdeckel.
+- Nach der Code-Review, vom Nutzer beauftragt (2026-11-25):
+  - Der Bedarf wird auf- und die Grenze abgerundet, damit ein Bedarf knapp
+    über der Grenze nicht als dieselbe Zahl erscheint (vorher etwa „needs
+    41.2 GB … at most 41.2 GB“).
+  - Das Gitter (N + 1 Punkte) wird erst nach allen Config-Prüfungen angelegt.
+    Vorher belegte ein riesiges N schon vor der Prüfung Speicher, bei
+    N = 2·10⁸ etwa 1,6 GB.
+  - Scheitert das Anlegen des Puffers trotz bestandener Prüfung (andere
+    Prozesse, strenges Overcommit, Adressraum), endet das Programm mit
+    „Error: the video buffer of … GB could not be allocated …“ und Exit-Code 1
+    statt mit einem nicht abgefangenen `std::bad_alloc`. Das ersetzt die
+    Prüfung nicht, siehe oben, es ist nur der Rückfall.
+  - 32-Bit-Systeme bleiben außen vor: Der Pi läuft mit 64 Bit.
 
 ## Tests
 
 - Unit-Test: Bedarf in Byte für bekannte Werte; die Grenze ist 60 % des
-  übergebenen RAMs bzw. 4 GB ohne RAM-Angabe; die RAM-Abfrage liefert auf
-  jeder CI-Plattform mehr als 1 GB.
+  übergebenen RAMs bzw. 4 GB ohne RAM-Angabe; die RAM-Abfrage liefert mehr
+  als 250 MB (ein Pi mit „1 GB“ meldet nur gut 0,9 GB); die GB-Angaben sind
+  richtig gerundet.
 - `run-input-checks.sh`:
   - Eine Config mit Plot, die weit über jeden RAM geht (etwa N = 100 000,
     order 8, `VideoTimePerSecond: 1e-8` bei t1 = 8e-5: 480 001 Frames, rund
     3 TB), wird sofort mit Meldung abgelehnt, ohne etwas anzulegen.
   - Eine Config, die mit Plot deutlich über 60 % jedes üblichen RAMs läge,
-    ohne Plot aber in Sekunden durchrechnet, läuft ohne Plot durch.
+    ohne Plot aber in Sekunden durchrechnet, läuft ohne Plot durch
+    (N = 20 000, order 8, t1 = 8e-8, `VideoTimePerSecond: 5.333e-12`:
+    900 057 Frames, rund 1,15 TB mit Plot, etwa 32 Schritte).
+- `run-video-render.sh`:
+  - N = 2·10⁸ mit Plot wird abgelehnt, ohne mehr als 128 MiB zu belegen.
+  - Nur unter Linux: Mit `ulimit -v` von 1 GB scheitert ein Puffer von 2 GB,
+    und das Programm meldet das mit Exit-Code 1.
 - Die bestehenden Video- und Speichertests laufen unverändert grün.
 
 ## Doku

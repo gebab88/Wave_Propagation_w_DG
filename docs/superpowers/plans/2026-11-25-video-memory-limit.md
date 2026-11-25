@@ -61,9 +61,9 @@
   - `test_buffer_bytes`:
     - `bufferBytes(1201, 250) == 2411608` (Standard-Config: 2,4 MB)
     - `bufferBytes(480001, 800000)` ≈ `480001.0 * 800001.0 * 8.0` (≈ 3,07e12)
-    - `bufferBytes(1e6, 1e9)` endlich und > 8e15
+    - `bufferBytes(1e6, 1e9)` endlich und ≈ `1e6 * (1e9 + 1.0) * 8.0`
   - `test_max_buffer_bytes`: `maxBufferBytes(8e9)` ≈ `4.8e9`; `maxBufferBytes(0) == 4.0e9`; `maxBufferBytes(-1) == 4.0e9`.
-  - `test_installed_ram_is_plausible`: `installedRamBytes() > 1e9` und `< 1e15`.
+  - `test_installed_ram_is_plausible`: `installedRamBytes() > 2.5e8` und `< 1e15` (ein Pi mit „1 GB“ meldet nur gut 0,9 GB).
 - [ ] **Step 2: Fehlschlag prüfen.** `make test-sampler` → Abbruch beim Kompilieren (`SystemMemory.hpp` fehlt, `bufferBytes` unbekannt).
 - [ ] **Step 3: Implementieren** wie in den Interfaces. Makefile: `obj/Release/SystemMemory.o` in `OBJS`; `test-sampler` hängt zusätzlich von `obj/Release/SystemMemory.o` ab und linkt es mit. Fehlt `_SC_PHYS_PAGES` unter macOS: stoppen und melden (NEEDS_CONTEXT), keinen `__APPLE__`-Zweig einbauen.
 - [ ] **Step 4: Grün prüfen.** `make test-sampler` → alle PASS; `make cleanOBJ cleanBIN && make Release Debug` ohne Warnung; `make test` alle PASS.
@@ -88,7 +88,7 @@
   # Too many frames and too much memory: the frame limit is reported.
   expect_rejected test_frame_limit_checked_first "video frames for t0" EnablePlotting=true N=100000 order=8 VideoTimePerSecond=1.0e-12
   ```
-  Dazu `test_frame_buffer_limit_ignored_without_plotting` nach dem Muster von `test_frame_limit_ignored_without_plotting`: `write_cfg` mit `N=4000 order=4 VideoTimePerSecond=5.333e-9`, Plot aus, `run_solver … 60` → rc 0 und „The calculations are finished!“. Ein Kommentar nennt den Bedarf mit Plot: 900 057 Frames × 16 000 Werte ≈ 115 GB.
+  Dazu `test_frame_buffer_limit_ignored_without_plotting` nach dem Muster von `test_frame_limit_ignored_without_plotting`: `write_cfg` mit `N=20000 order=8 t1=8.0e-8 VideoTimePerSecond=5.333e-12`, Plot aus, `run_solver … 60` → rc 0 und „The calculations are finished!“. Ein Kommentar nennt den Bedarf mit Plot: 900 057 Frames × 160 000 Werte ≈ 1,15 TB. (Zuerst war es `N=4000 order=4` mit dem Standard-t1, also 115 GB. Das lief auf Windows arm64 in den Timeout und sicherte auf Rechnern ab 192 GB RAM nichts ab.)
 - [ ] **Step 2: Erwartetes Verhalten vor der Änderung.** Die beiden letzten Tests sichern Verhalten ab, das es schon gibt, und laufen schon jetzt grün; `make test-input-checks` zeigt das. `test_frame_buffer_too_large_rejected` **nicht** mit dem alten Binary starten (siehe Global Constraints). Sein Fehlschlag wird in Step 4 belegt.
 - [ ] **Step 3: Implementieren.** Im Block `if (EnablePlotting)` nach dem Frame-Limit: Bedarf mit `bufferBytes(nFrames, N * order)`, Grenze mit `maxBufferBytes(installedRamBytes())`. Liegt der Bedarf darüber, `exit(EXIT_FAILURE)` mit dieser Meldung auf stderr (GB-Werte mit einer Nachkommastelle, Frames und Werte ganzzahlig, Prozent aus `kMaxRamFraction`):
   - RAM bekannt: `Config error: the video needs <B> GB (<F> frames x <V> values); at most <L> GB (60% of the RAM) are allowed. Increase VideoTimePerSecond, shorten t1 - t0 or reduce N or order.`
