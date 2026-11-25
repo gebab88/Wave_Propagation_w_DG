@@ -158,7 +158,7 @@ test_frame_limit_ignored_without_plotting
 # 16 000 values, about 115 GB.
 test_frame_buffer_limit_ignored_without_plotting() {
     local cfg="$work_dir/nomemlimit.yaml"
-    write_cfg "$cfg" N=4000 order=4 VideoTimePerSecond=5.333e-9
+    write_cfg "$cfg" N=4000 order=4 t1=8.0e-6 VideoTimePerSecond=5.333e-10
     run_solver "$cfg" 60
     [[ $rc -eq 0 ]] || { fail "${FUNCNAME[0]}" "exit code $rc: $err"; return; }
     [[ "$out" == *'The calculations are finished!'* ]] || { fail "${FUNCNAME[0]}" "run did not finish"; return; }
