@@ -177,4 +177,9 @@ docker-test-linux-arm64:
 docker-test-linux-x64:
 	scripts/docker-linux-test.sh x64 $(UBUNTU)
 
-.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-sampler test-input-checks test-menu test-video conpty-run docker-test-linux-arm64 docker-test-linux-x64
+# The CI's Linux jobs in Docker plus the macOS host, with a summary. CI_JOBS
+# picks jobs, e.g. `make ci-local CI_JOBS=linux-arm64`.
+ci-local:
+	UBUNTU=$(UBUNTU) scripts/ci-local.sh $(CI_JOBS)
+
+.PHONY: cleanOBJ cleanBIN clean cleanPictures Release Debug test test-render test-pipe test-sampler test-input-checks test-menu test-video conpty-run docker-test-linux-arm64 docker-test-linux-x64 ci-local

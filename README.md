@@ -155,6 +155,24 @@ aber nicht um. `test_buffer_allocation_failure_reported` wird im x64-Image
 deshalb übersprungen.
 Die CI testet beide Architekturen nativ ([Tests](#tests)).
 
+### CI lokal ausführen
+
+```sh
+make ci-local                          # macOS, Linux arm64 und Linux x64
+make ci-local CI_JOBS=linux-arm64      # nur ausgewählte Jobs (mac, linux-arm64, linux-x64)
+```
+
+`scripts/ci-local.sh` führt die beiden Linux-Jobs der CI in den Docker-Images
+aus und unter macOS zusätzlich dieselben Schritte auf dem Mac:
+`make Release Debug` und `make test`. Die Linux-Jobs setzen wie GitHub Actions
+`CI=true`, Menü-Tests ohne Terminal schlagen dann fehl, statt übersprungen zu
+werden. Am Ende steht eine Übersicht mit Ergebnis, Dauer und der Zahl der
+bestandenen, fehlgeschlagenen und übersprungenen Tests. Die Logs liegen in
+`bin/ci-local/`. Ist Docker nicht erreichbar, startet das Skript colima und
+stoppt es am Ende wieder. Scheitert der Image-Build, etwa am g++-Absturz unter
+QEMU, versucht es ihn ein zweites Mal. Die Windows-Jobs laufen nur in GitHub
+Actions.
+
 ---
 
 ## Windows (MSYS2)
