@@ -358,10 +358,6 @@ int main( int argc, char *argv[] ){
     requireFinite("x1", x1);
     requireIncreasing("x0", x0, "x1", x1);
 
-    vec x = linspace<vec>(x0, x1, Npoints);
-    const double dx  = x[1] - x[0];
-    const double Jac = dx / 2.0;
-
     const float  c_0   = cfgGet<float>(cfg, "c_0");
     const float  rho_0 = cfgGet<float>(cfg, "rho_0");
     requirePositive("c_0", c_0);
@@ -445,6 +441,13 @@ int main( int argc, char *argv[] ){
         return 1;
     }
     omp_set_num_threads(static_cast<int>(OpenMPThreads));
+
+    // The grid is allocated only after every config check, so a config the
+    // checks reject (e.g. a too large video for a huge N) allocates nothing
+    // of size N first.
+    vec x = linspace<vec>(x0, x1, Npoints);
+    const double dx  = x[1] - x[0];
+    const double Jac = dx / 2.0;
 
     // Ask only once the whole config is known to be valid, so a config error
     // never follows an answered menu.

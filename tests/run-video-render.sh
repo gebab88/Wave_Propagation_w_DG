@@ -124,6 +124,26 @@ test_memory_without_plotting() {
     else fail "$name" "max RSS $rss bytes >= 128 MiB"; fi
 }
 
+# The memory check must come before anything the size of the grid is
+# allocated: 2e8 cells need 1.6 GB for the grid points alone, while the video
+# (about 100 000 frames x 2e8 values, ~160 TB) is rejected at once.
+test_memory_check_before_grid() {
+    local name="${FUNCNAME[0]}" d="$work_dir/memgrid"
+    mkdir -p "$d"
+    sed -e 's/^\( *EnablePlotting:\).*/\1 true/' -e 's/^N:.*/N: 200000000/' \
+        -e 's/^order:.*/order: 1/' "$DEFAULT_CFG" >"$d/plot.yaml"
+    set_key "$d/plot.yaml" "$d/config.yaml" VideoTimePerSecond 1.2e-5
+    max_rss "$d" "$d/config.yaml"
+    if [[ -n "$skip" ]]; then echo "SKIP $name ($skip)"; return; fi
+    if [[ "$rc" -ne 1 ]]; then fail "$name" "solver exited with status $rc, expected 1"; return; fi
+    # The solver's stderr shares time.log with the time(1) report.
+    if ! grep -q 'Config error: the video needs' "$d/out.log" "$d/time.log"; then
+        fail "$name" "no 'Config error: the video needs' in output"; return; fi
+    if [[ -z "$rss" ]]; then fail "$name" "no max RSS in time output"; return; fi
+    if (( rss < 134217728 )); then pass "$name (max RSS $rss bytes)"
+    else fail "$name" "max RSS $rss bytes >= 128 MiB"; fi
+}
+
 # expect_frames <name> <expected frames> <key> <value> [<key> <value> ...]:
 # renders the smoke config with the given keys set; the announced frame count
 # must be the expected one and the video must hold exactly that many frames.
@@ -172,6 +192,7 @@ test_frames_between_steps
 test_single_frame_video
 test_memory_bounded
 test_memory_without_plotting
+test_memory_check_before_grid
 
 if [[ "$failures" -ne 0 ]]; then
     echo "$failures video render test(s) failed."
